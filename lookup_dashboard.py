@@ -638,7 +638,7 @@ def compare_snapshots(old_snap, new_tasks):
 
 def deploy_github(html_content):
     """Deploy HTML to GitHub Pages."""
-    cfg = load_cfg()
+    cfg = get_config()
     gh_token = cfg.get("github_token", "")
     gh_user = cfg.get("github_user", "")
     gh_repo = cfg.get("github_repo", "lookup-dashboard")
@@ -951,7 +951,7 @@ def generate_coaching(api_key, member):
 
 def send_slack_with_coaching(tasks, changes, collabs, projects, sections, dashboard_url=None):
     """Post summary to Slack channel, then per-member coaching in thread."""
-    cfg = load_cfg()
+    cfg = get_config()
     bot_token = cfg.get("slack_bot_token", "")
     channel_id = cfg.get("slack_channel_id", "")
     anthropic_key = cfg.get("anthropic_key", "")
@@ -1157,7 +1157,7 @@ def generate_coaching_comment(anthropic_key, member_name, member_data, sec_map):
 def send_slack_with_threads(tasks, changes, collabs, projects, sections, dashboard_url=None):
     """Post summary to channel, then per-member coaching as thread replies."""
     import re as re_mod
-    cfg = load_cfg()
+    cfg = get_config()
     bot_token = cfg.get("slack_bot_token", "")
     channel_id = cfg.get("slack_channel_id", "")
     anthropic_key = cfg.get("anthropic_key", "")
