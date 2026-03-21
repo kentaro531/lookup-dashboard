@@ -1,0 +1,42 @@
+name: LOOK UP Daily Dashboard
+
+on:
+  schedule:
+    # 毎朝7:00 JST = 22:00 UTC (前日)
+    - cron: '0 22 * * *'
+  workflow_dispatch:
+    # 手動実行も可能（GitHubのActionsタブ → Run workflow）
+
+jobs:
+  dashboard:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Run dashboard script
+        env:
+          CI: 'true'
+          TODOIST_TOKEN: ${{ secrets.TODOIST_TOKEN }}
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+          SLACK_CHANNEL_ID: ${{ secrets.SLACK_CHANNEL_ID }}
+          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
+          ANTHROPIC_KEY: ${{ secrets.ANTHROPIC_KEY }}
+          GH_PAT: ${{ secrets.GH_PAT }}
+          GH_USER: ${{ github.repository_owner }}
+          GH_REPO: ${{ github.event.repository.name }}
+        run: python3 lookup_dashboard.py
+
+      - name: Commit snapshots and dashboard
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add snapshots/ index.html
+          git diff --cached --quiet || git commit -m "Dashboard update $(date -u +%Y-%m-%d)"
+          git push
