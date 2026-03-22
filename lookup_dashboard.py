@@ -1433,6 +1433,14 @@ def main():
     changes = []
     if old_snap:
         changes = compare_snapshots(old_snap, tasks)
+        # Filter out changes from excluded members
+        def is_excluded_change(c):
+            aid = c.get("assignee_id", "")
+            if not aid: return False
+            col = collabs.get(aid, collabs.get(str(aid), {}))
+            nm = (col.get("name") or col.get("full_name") or "").lower()
+            return any(ex.lower() in nm for ex in EXCLUDE_MEMBERS)
+        changes = [c for c in changes if not is_excluded_change(c)]
         postponed = sum(1 for c in changes if c["change_type"]=="postponed")
         earlier = sum(1 for c in changes if c["change_type"]=="moved_earlier")
         removed = sum(1 for c in changes if c["change_type"]=="removed")
