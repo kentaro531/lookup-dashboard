@@ -5,43 +5,88 @@ on:
     # 毎朝7:00 JST = 22:00 UTC (前日)
     - cron: '0 22 * * *'
   workflow_dispatch:
-    # 手動実行も可能（GitHubのActionsタブ → Run workflow）
+    inputs:
+      mode:
+        description: 'Dashboard mode'
+        required: false
+        default: 'both'
+        type: choice
+        options:
+          - both
+          - accounting
+          - non-accounting
 
 permissions:
   contents: write
 
 jobs:
-  dashboard:
+  dashboard-accounting:
     runs-on: ubuntu-latest
-    
+    if: >
+      github.event_name == 'schedule' ||
+      github.event.inputs.mode == 'both' ||
+      github.event.inputs.mode == 'accounting'
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           token: ${{ secrets.GH_PAT }}
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-
-      - name: Run dashboard script
+      - name: Run (会計)
         env:
           CI: 'true'
+          DASHBOARD_MODE: 'accounting'
           TODOIST_TOKEN: ${{ secrets.TODOIST_TOKEN }}
           SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
           SLACK_CHANNEL_ID: ${{ secrets.SLACK_CHANNEL_ID }}
-          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
           ANTHROPIC_KEY: ${{ secrets.ANTHROPIC_KEY }}
           GH_PAT: ${{ secrets.GH_PAT }}
           GH_USER: ${{ github.repository_owner }}
           GH_REPO: ${{ github.event.repository.name }}
         run: python3 lookup_dashboard.py
-
-      - name: Commit snapshots and dashboard
+      - name: Commit
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add -A snapshots/ index.html
-          git diff --cached --quiet || git commit -m "Dashboard update $(date -u +%Y-%m-%d)"
+          git add -A snapshots/ accounting.html
+          git diff --cached --quiet || git commit -m "Accounting dashboard $(date -u +%Y-%m-%d)"
+          git push
+
+  dashboard-non-accounting:
+    runs-on: ubuntu-latest
+    needs: dashboard-accounting
+    if: >
+      always() && (
+        github.event_name == 'schedule' ||
+        github.event.inputs.mode == 'both' ||
+        github.event.inputs.mode == 'non-accounting'
+      )
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GH_PAT }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Pull latest (after accounting job)
+        run: git pull --rebase origin main || true
+      - name: Run (会計以外)
+        env:
+          CI: 'true'
+          DASHBOARD_MODE: 'non-accounting'
+          TODOIST_TOKEN: ${{ secrets.TODOIST_TOKEN }}
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+          SLACK_CHANNEL_ID: C0ANZB6P10Q
+          ANTHROPIC_KEY: ${{ secrets.ANTHROPIC_KEY }}
+          GH_PAT: ${{ secrets.GH_PAT }}
+          GH_USER: ${{ github.repository_owner }}
+          GH_REPO: ${{ github.event.repository.name }}
+        run: python3 lookup_dashboard.py
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -A snapshots/ other.html
+          git diff --cached --quiet || git commit -m "Non-accounting dashboard $(date -u +%Y-%m-%d)"
           git push
