@@ -240,7 +240,9 @@ var ACCG_PREFIX = "__ACCG_PREFIX__";
 var PCOL={4:"#EF4444",3:"#F97316",2:"#FACC15",1:"#64748B"};
 var PLAB={4:"P1",3:"P2",2:"P3",1:"P4"};
 var PPAL=["#3B82F6","#22C55E","#F97316","#A78BFA","#EC4899","#14B8A6","#FACC15","#EF4444","#06B6D4","#8B5CF6"];
-var S={mode:"member",sub:"all",member:"__all__",openBlock:null,openMember:null,showChanges:false};
+var S={mode:"member",sub:"all",member:"__all__",openBlock:null,openMember:null,showChanges:true};
+// For filtered modes, default to project view (data is already filtered)
+if(DATA.dashboard_mode==="accounting"||DATA.dashboard_mode==="non-accounting"){S.mode="project";S.sub="all";}
 
 var secMap={};for(var i=0;i<DATA.sections.length;i++)secMap[DATA.sections[i].id]=DATA.sections[i];
 var projMap={};for(var i=0;i<DATA.projects.length;i++)projMap[DATA.projects[i].id]=DATA.projects[i];
@@ -473,7 +475,8 @@ function render(){
   var logoHtml=DATA.logo?'<img src="data:image/png;base64,'+DATA.logo+'" style="height:26px" alt="LOOK UP">':'<span style="font-size:16px;font-weight:800">LOOK UP</span>';
 
   // Header
-  var h='<div class="hdr">'+logoHtml+'<span class="logo-s">Dashboard</span><span class="gen">'+DATA.generated+' | '+ts.length+' tasks</span></div>';
+  var modeLabel=DATA.dashboard_mode==="accounting"?" [会計]":DATA.dashboard_mode==="non-accounting"?" [会計以外]":"";
+  var h='<div class="hdr">'+logoHtml+'<span class="logo-s">Dashboard'+modeLabel+'</span><span class="gen">'+DATA.generated+' | '+ts.length+' tasks</span></div>';
 
   // Navigation
   h+='<div class="nav">';
@@ -484,12 +487,15 @@ function render(){
   h+='</div>';
 
   if(S.mode==="project"){
-    h+='<div class="nav-sep"></div>';
-    h+='<div class="nav-group">';
-    h+='<button class="nav-btn '+(S.sub==="all"?"on":"")+'" onclick="S.sub=\'all\';render()">全社</button>';
-    h+='<button class="nav-btn '+(S.sub==="accg"?"on":"")+'" onclick="S.sub=\'accg\';render()">会計</button>';
-    h+='<button class="nav-btn '+(S.sub==="other"?"on":"")+'" onclick="S.sub=\'other\';render()">その他</button>';
-    h+='</div>';
+    var dm=DATA.dashboard_mode||"all";
+    if(dm==="all"){
+      h+='<div class="nav-sep"></div>';
+      h+='<div class="nav-group">';
+      h+='<button class="nav-btn '+(S.sub==="all"?"on":"")+'" onclick="S.sub=\'all\';render()">全社</button>';
+      h+='<button class="nav-btn '+(S.sub==="accg"?"on":"")+'" onclick="S.sub=\'accg\';render()">会計</button>';
+      h+='<button class="nav-btn '+(S.sub==="other"?"on":"")+'" onclick="S.sub=\'other\';render()">その他</button>';
+      h+='</div>';
+    }
   }
   if(S.mode==="member"){
     h+='<div class="nav-sep"></div>';
@@ -677,7 +683,7 @@ def compare_snapshots(old_snap, new_tasks):
             })
     return changes
 
-def deploy_github(html_content):
+def deploy_github(html_content, filename="index.html"):
     """Deploy HTML to GitHub Pages."""
     cfg = get_config()
     gh_token = cfg.get("github_token", "")
@@ -687,7 +693,7 @@ def deploy_github(html_content):
         return None
 
     import base64 as b64mod
-    url = f"https://api.github.com/repos/{gh_user}/{gh_repo}/contents/index.html"
+    url = f"https://api.github.com/repos/{gh_user}/{gh_repo}/contents/{filename}"
 
     # First, get current file SHA (needed for update)
     req = urllib.request.Request(url, headers={
@@ -718,7 +724,7 @@ def deploy_github(html_content):
     })
     try:
         with urllib.request.urlopen(req, context=ssl.create_default_context()) as r:
-            return f"https://{gh_user}.github.io/{gh_repo}/"
+            return f"https://{gh_user}.github.io/{gh_repo}/{filename}"
     except urllib.error.HTTPError as e:
         print(f"    GitHub APIエラー: {e.code} {e.read().decode()[:200]}")
         return None
@@ -1086,7 +1092,7 @@ def send_slack_with_coaching(tasks, changes, collabs, projects, sections, dashbo
 
     return True
 
-def gen(projects, sections, tasks, collabs, logo_b64, changes=None):
+def gen(projects, sections, tasks, collabs, logo_b64, changes=None, mode="all"):
     now = datetime.now().strftime("%Y/%m/%d %H:%M")
     today = date.today()
     for t in tasks:
@@ -1099,6 +1105,7 @@ def gen(projects, sections, tasks, collabs, logo_b64, changes=None):
             "dayafter":(today+timedelta(days=2)).isoformat(),
             "logo":logo_b64,
             "exclude_members":EXCLUDE_MEMBERS,
+            "dashboard_mode": mode,
             "changes":changes or []}
     html = HTML_TEMPLATE.replace("__DATA_PLACEHOLDER__", json.dumps(data, ensure_ascii=False))
     return html.replace("__ACCG_PREFIX__", ACCG_PREFIX)
@@ -1509,7 +1516,7 @@ def main():
 
     # --- Generate HTML ---
     print("  HTML生成中...")
-    html = gen(projects, sections, tasks, collabs, LOGO_B64, changes)
+    html = gen(projects, sections, tasks, collabs, LOGO_B64, changes, mode=mode)
 
     # Save HTML locally
     if mode == "all":
@@ -1530,16 +1537,16 @@ def main():
     # --- GitHub Pages deploy ---
     dashboard_url = None
     if cfg.get("github_token") and not is_ci():
-        # Local mode: deploy via API
+        # Local mode: deploy via API with mode-specific filename
         print("  GitHub Pagesにデプロイ中...")
-        dashboard_url = deploy_github(html)
+        dashboard_url = deploy_github(html, ci_filename)
         if dashboard_url:
             print(f"    公開: {dashboard_url}")
         else:
             print("    デプロイ失敗")
     elif is_ci() and cfg.get("github_user"):
-        # CI mode: index.html is committed by workflow, just build URL
-        dashboard_url = f"https://{cfg['github_user']}.github.io/{cfg['github_repo']}/"
+        # CI mode: file is committed by workflow, just build URL
+        dashboard_url = f"https://{cfg['github_user']}.github.io/{cfg['github_repo']}/{ci_filename}"
         print(f"  GitHub Pages: {dashboard_url} (ワークフローがコミット)")
 
     # --- Slack notification ---
