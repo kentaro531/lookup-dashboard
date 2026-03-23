@@ -239,6 +239,33 @@ body{background:var(--bg);color:var(--tx);font-family:'JetBrains Mono',monospace
 .weekly-tbl tr:hover{background:var(--sfh)}
 .weekly-tbl tr.wt-foot{background:var(--sf);border-top:2px solid var(--bd)}
 .weekly-tbl tr.wt-foot td{font-weight:700;color:var(--ac)}
+.wt-click{cursor:pointer;position:relative}
+.wt-click:hover{background:rgba(59,130,246,.15);border-radius:4px}
+.wt-cnt{font-size:10px;color:var(--txd)}
+.wt-detail-row td{padding:0!important;background:var(--bg)}
+.wt-detail{padding:8px 16px;max-height:300px;overflow-y:auto}
+.wt-detail-item{display:flex;gap:8px;padding:4px 8px;border-bottom:1px solid var(--bd);font-size:11px;align-items:center}
+.wt-detail-item:last-child{border-bottom:none}
+.wt-detail-date{color:var(--txd);min-width:40px;font-size:10px}
+.wt-detail-content{flex:1;color:var(--tx);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.wt-detail-proj{color:var(--txd);font-size:10px;max-width:120px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.wt-detail-min{color:var(--ac);font-weight:600;font-size:10px;min-width:40px;text-align:right}
+.sec-cards{display:flex;gap:8px;padding:12px 24px;flex-wrap:wrap}
+.sec-card{background:var(--sf);border:1px solid var(--bd);border-radius:8px;padding:10px 14px;cursor:pointer;min-width:140px;max-width:200px;transition:all .15s}
+.sec-card:hover{background:var(--sfh);border-color:var(--ac)}
+.sec-card.active{border-color:var(--ac);background:rgba(59,130,246,.08)}
+.sec-card-name{font-size:12px;font-weight:700;color:var(--tx);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sec-card-proj{font-size:9px;color:var(--txd);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sec-card-stats{display:flex;gap:8px;margin-top:6px;align-items:center}
+.sec-card-count{font-size:11px;color:var(--txm)}
+.sec-card-time{font-size:11px;color:var(--ac);font-weight:600}
+.sec-card-badges{display:flex;gap:3px;margin-top:4px;flex-wrap:wrap}
+.sec-detail{margin:0 24px 16px;border:1px solid var(--bd);border-radius:10px;background:var(--sf);overflow:hidden}
+.sec-detail-hdr{padding:10px 14px;display:flex;align-items:center;gap:10px;border-bottom:1px solid var(--bd);background:rgba(59,130,246,.05)}
+.sec-detail-hdr>span:first-child{font-size:13px;font-weight:700;color:var(--tx);flex:1}
+.sec-detail-info{font-size:11px;color:var(--txm)}
+.sec-detail .blocks{padding:10px 14px}
+.sec-detail .block-card{min-width:80px}
 .member-cards{display:flex;gap:8px;padding:12px 14px;flex-wrap:wrap}
 .m-card{min-width:120px;flex:1;max-width:200px;background:var(--bg);border:1px solid var(--bd);border-radius:8px;padding:10px 14px;cursor:pointer;transition:all .2s}
 .m-card:hover{border-color:var(--acl);transform:translateY(-1px)}
@@ -255,7 +282,7 @@ var ACCG_PREFIX = "__ACCG_PREFIX__";
 var PCOL={4:"#EF4444",3:"#F97316",2:"#FACC15",1:"#64748B"};
 var PLAB={4:"P1",3:"P2",2:"P3",1:"P4"};
 var PPAL=["#3B82F6","#22C55E","#F97316","#A78BFA","#EC4899","#14B8A6","#FACC15","#EF4444","#06B6D4","#8B5CF6"];
-var S={mode:"member",sub:"all",member:"__all__",openBlock:null,openMember:null,showChanges:true};
+var S={mode:"member",sub:"all",member:"__all__",openBlock:null,openMember:null,showChanges:true,weekDetail:null,openSection:null,secBlock:null};
 // For filtered modes, default to project view (data is already filtered)
 if(DATA.dashboard_mode==="accounting"||DATA.dashboard_mode==="non-accounting"){S.mode="project";S.sub="all";}
 
@@ -368,6 +395,24 @@ function groupByMember(tasks){
   return arr;
 }
 
+function groupByProject(tasks){
+  var map={};
+  for(var i=0;i<tasks.length;i++){
+    var t=tasks[i];var pid=t.project_id||"__np__";
+    if(!map[pid])map[pid]={tasks:[],mins:0};
+    map[pid].tasks.push(t);
+    map[pid].mins+=parseMinutes(t.labels);
+  }
+  var arr=[];
+  for(var k in map){
+    var p=projMap[k];
+    var nm=k==="__np__"?"プロジェクトなし":(p?(p.name||"不明"):"不明");
+    arr.push({id:k,name:nm,tasks:map[k].tasks,mins:map[k].mins,count:map[k].tasks.length});
+  }
+  arr.sort(function(a,b){return b.count-a.count||b.mins-a.mins;});
+  return arr;
+}
+
 function renderBlocks(tasks,prefix,drilldown){
   var bk=bucketTasks(tasks);
   var maxCount=Math.max(bk.overdue.length,bk.today.length,bk.tomorrow.length,bk.dayafter.length,bk.rest.length,1);
@@ -401,8 +446,8 @@ function renderBlocks(tasks,prefix,drilldown){
     if(S.openBlock!==fullKey||!d.tasks.length)continue;
     var info=bucketInfo(d.tasks);
 
-    if(drilldown){
-      // DRILL-DOWN MODE: show member cards first
+    if(drilldown==="member"||drilldown===true){
+      // DRILL-DOWN: member cards
       var members=groupByMember(d.tasks);
       h+='<div class="detail show"><div class="detail-hdr"><span>'+d.label+' &#8212; '+info.count+'件'+(info.mins?' / '+fmtMin(info.mins):'')+'</span><span class="detail-close" onclick="S.openBlock=null;S.openMember=null;render()">&#10005;</span></div>';
       h+='<div class="member-cards">';
@@ -417,7 +462,6 @@ function renderBlocks(tasks,prefix,drilldown){
       }
       h+='</div>';
 
-      // Show selected member's tasks
       if(S.openMember){
         var selMember=null;
         for(var mi=0;mi<members.length;mi++){if(members[mi].id===S.openMember){selMember=members[mi];break;}}
@@ -428,6 +472,35 @@ function renderBlocks(tasks,prefix,drilldown){
         }
       }
       h+='</div>';
+
+    } else if(drilldown==="project"){
+      // DRILL-DOWN: project cards
+      var projects=groupByProject(d.tasks);
+      h+='<div class="detail show"><div class="detail-hdr"><span>'+d.label+' &#8212; '+info.count+'件'+(info.mins?' / '+fmtMin(info.mins):'')+'</span><span class="detail-close" onclick="S.openBlock=null;S.openMember=null;render()">&#10005;</span></div>';
+      h+='<div class="member-cards">';
+      for(var pi=0;pi<projects.length;pi++){
+        var p=projects[pi];
+        var isOn=S.openMember==="proj_"+p.id;
+        h+='<div class="m-card'+(isOn?" active":"")+'" onclick="event.stopPropagation();clickMemberCard(\'proj_'+p.id+'\')" style="min-width:140px">';
+        h+='<div class="m-card-name" style="font-size:10px">'+esc(p.name)+'</div>';
+        h+='<div class="m-card-row"><span class="m-card-count">'+p.count+'<span class="m-card-unit"> 件</span></span>';
+        h+=(p.mins?'<span class="m-card-time">'+fmtMin(p.mins)+'</span>':'')+'</div>';
+        h+='</div>';
+      }
+      h+='</div>';
+
+      if(S.openMember&&S.openMember.indexOf("proj_")===0){
+        var selProjId=S.openMember.replace("proj_","");
+        var selProj=null;
+        for(var pi=0;pi<projects.length;pi++){if(projects[pi].id===selProjId){selProj=projects[pi];break;}}
+        if(selProj){
+          h+='<div style="padding:6px 14px;font-size:10px;font-weight:600;color:var(--acl);background:rgba(30,64,175,.1);border-top:1px solid var(--bd);display:flex;justify-content:space-between;align-items:center"><span>'+esc(selProj.name)+' &#8212; '+selProj.count+'件'+(selProj.mins?' / '+fmtMin(selProj.mins):'')+'</span><span style="color:var(--txd);font-size:9px;cursor:pointer" onclick="event.stopPropagation();S.openMember=null;render()">&#10005; 閉じる</span></div>';
+          sortTasks(selProj.tasks);
+          for(var j=0;j<selProj.tasks.length;j++)h+=tRow(selProj.tasks[j],false,true);
+        }
+      }
+      h+='</div>';
+
     } else {
       // DIRECT MODE: show tasks directly
       h+='<div class="detail show"><div class="detail-hdr"><span>'+d.label+' &#8212; '+info.count+'件'+(info.mins?' / '+fmtMin(info.mins):'')+'</span><span class="detail-close" onclick="S.openBlock=null;S.openMember=null;render()">&#10005;</span></div>';
@@ -439,43 +512,101 @@ function renderBlocks(tasks,prefix,drilldown){
   return h;
 }
 
-function renderProjectView(tasks,filterMode){
-  var h="";
-  var projs=DATA.projects.filter(function(p){
-    if(filterMode==="accg")return p.name&&p.name.indexOf(ACCG_PREFIX)===0;
-    if(filterMode==="other")return !p.name||p.name.indexOf(ACCG_PREFIX)!==0;
-    return true;
-  });
-  for(var pi=0;pi<projs.length;pi++){
-    var proj=projs[pi];
-    var pt=tasks.filter(function(t){return t.project_id===proj.id;});
-    if(!pt.length)continue;
-    var secs=DATA.sections.filter(function(s){return s.project_id===proj.id;});
-    var col=PPAL[pi%PPAL.length];var id="p"+pi;
-    var displayName=filterMode==="accg"?proj.name.replace(ACCG_PREFIX,""):proj.name;
-    var defOpen=pt.length<=25?"op":"cl";
-    h+='<div class="sec"><div class="sh '+defOpen+'" onclick="toggle(\''+id+'\')"><span class="arr '+defOpen+'" id="a-'+id+'">&#9654;</span><span class="dot" style="background:'+col+'"></span><span class="st">'+esc(displayName)+'</span><span class="scn">'+pt.length+'</span></div><div class="sb" id="b-'+id+'"'+(defOpen==="cl"?' style="display:none"':'')+'>';
-    var noS=pt.filter(function(t){return !t.section_id;});
-    if(noS.length){h+='<div class="ssn">セクションなし ('+noS.length+')</div>';sortTasks(noS);for(var j=0;j<noS.length;j++)h+=tRow(noS[j],false,true);}
-    for(var si=0;si<secs.length;si++){
-      var sec=secs[si];var st=pt.filter(function(t){return t.section_id===sec.id;});
-      if(!st.length)continue;
-      // For accounting, show client badges
-      var badges="";
-      if(filterMode==="accg"){
-        var cOv=0,cTd=0,cTm=0,cMin=0;
-        for(var k=0;k<st.length;k++){var dd=st[k].due?st[k].due.date:null;if(isOv(dd))cOv++;if(isTd(dd))cTd++;if(isTm(dd))cTm++;cMin+=parseMinutes(st[k].labels);}
-        badges='<div class="client-badges">';
-        if(cOv)badges+='<span class="bg bg-r">超過 '+cOv+'</span>';
-        if(cTd)badges+='<span class="bg bg-o">今日 '+cTd+'</span>';
-        if(cTm)badges+='<span class="bg bg-y">明日 '+cTm+'</span>';
-        if(cMin)badges+='<span class="bg bg-g">'+fmtMin(cMin)+'</span>';
-        badges+='</div>';
+function renderSectionView(tasks,filterMode){
+  // Gather all sections with their tasks
+  var secData={};
+  for(var i=0;i<tasks.length;i++){
+    var t=tasks[i];
+    var sid=t.section_id||"__nosec__";
+    if(!secData[sid])secData[sid]={tasks:[],mins:0};
+    secData[sid].tasks.push(t);
+    secData[sid].mins+=parseMinutes(t.labels);
+  }
+  // Build section list
+  var secList=[];
+  for(var k in secData){
+    var secInfo=secMap[k];
+    var nm=k==="__nosec__"?"セクションなし":(secInfo?secInfo.name:"不明");
+    var proj=secInfo?projMap[secInfo.project_id]:null;
+    var projName=proj?proj.name:"";
+    // Count date buckets
+    var bk=bucketTasks(secData[k].tasks);
+    secList.push({
+      id:k,name:nm,projName:projName,
+      tasks:secData[k].tasks,mins:secData[k].mins,count:secData[k].tasks.length,
+      ovCount:bk.overdue.length,tdCount:bk.today.length,tmCount:bk.tomorrow.length
+    });
+  }
+  secList.sort(function(a,b){return b.ovCount-a.ovCount||b.count-a.count;});
+
+  var h='';
+  // Section cards
+  h+='<div class="sec-cards">';
+  for(var i=0;i<secList.length;i++){
+    var s=secList[i];
+    var isOn=S.openSection===s.id;
+    var hasOv=s.ovCount>0;
+    h+='<div class="sec-card'+(isOn?" active":"")+'" onclick="S.openSection=S.openSection===\''+s.id+'\'?null:\''+s.id+'\';S.secBlock=null;render()">';
+    h+='<div class="sec-card-name">'+esc(s.name)+'</div>';
+    if(s.projName&&filterMode!=="accg")h+='<div class="sec-card-proj">'+esc(s.projName)+'</div>';
+    h+='<div class="sec-card-stats">';
+    h+='<span class="sec-card-count">'+s.count+'件</span>';
+    if(s.mins)h+='<span class="sec-card-time">'+fmtMin(s.mins)+'</span>';
+    h+='</div>';
+    if(hasOv)h+='<div class="sec-card-badges"><span class="bg bg-r">超過'+s.ovCount+'</span>';
+    if(s.tdCount)h+='<span class="bg bg-o">今日'+s.tdCount+'</span>';
+    if(hasOv||s.tdCount)h+='</div>';
+    h+='</div>';
+  }
+  h+='</div>';
+
+  // Expanded section: date blocks
+  if(S.openSection){
+    var selSec=null;
+    for(var i=0;i<secList.length;i++){if(secList[i].id===S.openSection){selSec=secList[i];break;}}
+    if(selSec){
+      h+='<div class="sec-detail">';
+      h+='<div class="sec-detail-hdr"><span>'+esc(selSec.name)+(selSec.projName&&filterMode!=="accg"?' ― '+esc(selSec.projName):'')+'</span>';
+      h+='<span class="sec-detail-info">'+selSec.count+'件'+(selSec.mins?' / '+fmtMin(selSec.mins):'')+'</span>';
+      h+='<span class="detail-close" onclick="S.openSection=null;S.secBlock=null;render()">&#10005;</span></div>';
+
+      // Date blocks within this section
+      var bk=bucketTasks(selSec.tasks);
+      var defs=[
+        {key:"overdue",label:"期限超過",cls:"block-ov",tasks:bk.overdue},
+        {key:"today",label:"今日",cls:"block-td",tasks:bk.today},
+        {key:"tomorrow",label:"明日",cls:"block-tm",tasks:bk.tomorrow},
+        {key:"dayafter",label:"明後日",cls:"block-da",tasks:bk.dayafter},
+        {key:"rest",label:"それ以降",cls:"block-ft",tasks:bk.rest}
+      ];
+      var maxCount=Math.max(bk.overdue.length,bk.today.length,bk.tomorrow.length,bk.dayafter.length,bk.rest.length,1);
+      h+='<div class="blocks">';
+      for(var i=0;i<defs.length;i++){
+        var d=defs[i];var info=bucketInfo(d.tasks);
+        var isActive=S.secBlock===d.key;
+        var barW=maxCount>0?Math.round(info.count/maxCount*100):0;
+        h+='<div class="block-card '+d.cls+(isActive?" active":"")+'" onclick="event.stopPropagation();S.secBlock=S.secBlock===\''+d.key+'\'?null:\''+d.key+'\';render()">';
+        h+='<div class="block-top"><div class="block-label">'+d.label+'</div>';
+        h+='<div class="block-nums"><span class="block-count">'+info.count+'</span>';
+        h+=(info.mins?'<span class="block-time">'+fmtMin(info.mins)+'</span>':'<span class="block-time" style="opacity:.3">0m</span>')+'</div></div>';
+        h+='<div class="block-bar"><div class="block-bar-fill" style="width:'+barW+'%"></div></div>';
+        h+='</div>';
       }
-      h+='<div class="ssh"><span>'+esc(sec.name)+'</span>'+badges+'<span style="color:#64748B;font-size:10px;margin-left:4px">'+st.length+'</span></div>';
-      sortTasks(st);for(var k=0;k<st.length;k++)h+=tRow(st[k],false,true);
+      h+='</div>';
+
+      // Task list for selected date block
+      for(var i=0;i<defs.length;i++){
+        var d=defs[i];
+        if(S.secBlock!==d.key||!d.tasks.length)continue;
+        var info=bucketInfo(d.tasks);
+        h+='<div class="detail show"><div class="detail-hdr"><span>'+esc(selSec.name)+' &#8212; '+d.label+' '+info.count+'件'+(info.mins?' / '+fmtMin(info.mins):'')+'</span>';
+        h+='<span class="detail-close" onclick="S.secBlock=null;render()">&#10005;</span></div>';
+        sortTasks(d.tasks);
+        for(var j=0;j<d.tasks.length;j++)h+=tRow(d.tasks[j],false,true);
+        h+='</div>';
+      }
+      h+='</div>';
     }
-    h+='</div></div>';
   }
   return h;
 }
@@ -497,27 +628,60 @@ function getMembers(tasks){
   return result;
 }
 
-function renderWeeklyView(tasks){
+function renderWeeklyView(){
+  var allTasks=DATA.all_tasks||DATA.tasks;
+  var allProj={};if(DATA.all_projects)for(var i=0;i<DATA.all_projects.length;i++)allProj[DATA.all_projects[i].id]=DATA.all_projects[i];
+  else allProj=projMap;
+  function is40(t){var p=allProj[t.project_id];return p&&p.name&&p.name.substring(0,2)==="40";}
   var wb=getWeekBounds();
-  var members={};var excl=DATA.exclude_members||[];
+  var excl=DATA.exclude_members||[];
   function isExcl(nm){for(var i=0;i<excl.length;i++){if(nm.toLowerCase().indexOf(excl[i].toLowerCase())>=0)return true;}return false;}
-  for(var i=0;i<tasks.length;i++){
-    var t=tasks[i];var aid=gA(t);if(!aid)continue;
+  var members={};
+  for(var i=0;i<allTasks.length;i++){
+    var t=allTasks[i];var aid=gA(t);if(!aid)continue;
     var c=DATA.collaborators[aid];if(!c)continue;
     var nm=c.name||c.full_name||"";if(isExcl(nm))continue;
     var dd=t.due?t.due.date:null;if(!dd)continue;
-    var mins=parseMinutes(t.labels);
-    var is40=isAcct40(t);
-    if(!members[aid])members[aid]={name:nm,tw40:0,twOther:0,nw40:0,nwOther:0};
+    var mins=parseMinutes(t.labels);var a40=is40(t);
+    if(!members[aid])members[aid]={id:aid,name:nm,tw40m:0,tw40c:0,tw40t:[],twOm:0,twOc:0,twOt:[],nw40m:0,nw40c:0,nw40t:[],nwOm:0,nwOc:0,nwOt:[]};
     var m=members[aid];
-    if(inRange(dd,wb.thisWeek.start,wb.thisWeek.end)){if(is40)m.tw40+=mins;else m.twOther+=mins;}
-    if(inRange(dd,wb.nextWeek.start,wb.nextWeek.end)){if(is40)m.nw40+=mins;else m.nwOther+=mins;}
+    var pn=allProj[t.project_id]?allProj[t.project_id].name:"";
+    var info={content:t.content,project:pn,mins:mins,due:dd};
+    if(inRange(dd,wb.thisWeek.start,wb.thisWeek.end)){
+      if(a40){m.tw40m+=mins;m.tw40c++;m.tw40t.push(info);}
+      else{m.twOm+=mins;m.twOc++;m.twOt.push(info);}
+    }
+    if(inRange(dd,wb.nextWeek.start,wb.nextWeek.end)){
+      if(a40){m.nw40m+=mins;m.nw40c++;m.nw40t.push(info);}
+      else{m.nwOm+=mins;m.nwOc++;m.nwOt.push(info);}
+    }
   }
   var arr=[];for(var k in members)arr.push(members[k]);
-  arr.sort(function(a,b){return(b.tw40+b.twOther)-(a.tw40+a.twOther);});
-  var tot={tw40:0,twOther:0,nw40:0,nwOther:0};
-  for(var i=0;i<arr.length;i++){tot.tw40+=arr[i].tw40;tot.twOther+=arr[i].twOther;tot.nw40+=arr[i].nw40;tot.nwOther+=arr[i].nwOther;}
+  arr.sort(function(a,b){return(b.tw40c+b.twOc+b.nw40c+b.nwOc)-(a.tw40c+a.twOc+a.nw40c+a.nwOc);});
+  var tot={tw40m:0,tw40c:0,twOm:0,twOc:0,nw40m:0,nw40c:0,nwOm:0,nwOc:0};
+  for(var i=0;i<arr.length;i++){var m=arr[i];tot.tw40m+=m.tw40m;tot.tw40c+=m.tw40c;tot.twOm+=m.twOm;tot.twOc+=m.twOc;tot.nw40m+=m.nw40m;tot.nw40c+=m.nw40c;tot.nwOm+=m.nwOm;tot.nwOc+=m.nwOc;}
   function fmtD(d){var p=d.split("-");return parseInt(p[1])+"/"+parseInt(p[2]);}
+  function cell(mins,cnt,key){
+    if(cnt===0)return'<td class="wt-val">-</td>';
+    var txt=mins?fmtMin(mins):'';
+    txt+=(txt?' ':'')+'<span class="wt-cnt">('+cnt+'件)</span>';
+    return'<td class="wt-val wt-click" onclick="S.weekDetail=S.weekDetail===\''+key+'\'?null:\''+key+'\';render()">'+txt+'</td>';
+  }
+  function detailRows(tasks,colSpan){
+    if(!tasks.length)return'';
+    var h='<tr class="wt-detail-row"><td colspan="'+colSpan+'"><div class="wt-detail">';
+    tasks.sort(function(a,b){return a.due<b.due?-1:a.due>b.due?1:0;});
+    for(var i=0;i<tasks.length;i++){
+      var t=tasks[i];
+      h+='<div class="wt-detail-item"><span class="wt-detail-date">'+fmtD(t.due)+'</span>';
+      h+='<span class="wt-detail-content">'+esc(t.content)+'</span>';
+      h+='<span class="wt-detail-proj">'+esc(t.project)+'</span>';
+      if(t.mins)h+='<span class="wt-detail-min">'+fmtMin(t.mins)+'</span>';
+      h+='</div>';
+    }
+    h+='</div></td></tr>';
+    return h;
+  }
   var h='<div class="weekly-view">';
   h+='<div class="weekly-period">今週: '+fmtD(wb.thisWeek.start)+' ～ '+fmtD(wb.thisWeek.end)+'　　来週: '+fmtD(wb.nextWeek.start)+' ～ '+fmtD(wb.nextWeek.end)+'</div>';
   h+='<table class="weekly-tbl"><thead>';
@@ -528,21 +692,32 @@ function renderWeeklyView(tasks){
   h+='<th class="wt-sub">会計</th><th class="wt-sub">会計以外</th><th class="wt-sub wt-total">合計</th></tr>';
   h+='</thead><tbody>';
   for(var i=0;i<arr.length;i++){
-    var m=arr[i];var twT=m.tw40+m.twOther;var nwT=m.nw40+m.nwOther;
+    var m=arr[i];
+    var twT=m.tw40c+m.twOc;var nwT=m.nw40c+m.nwOc;
     if(twT===0&&nwT===0)continue;
+    var twTm=m.tw40m+m.twOm;var nwTm=m.nw40m+m.nwOm;
     h+='<tr><td class="wt-name">'+esc(m.name)+'</td>';
-    h+='<td class="wt-val">'+(m.tw40?fmtMin(m.tw40):'-')+'</td>';
-    h+='<td class="wt-val">'+(m.twOther?fmtMin(m.twOther):'-')+'</td>';
-    h+='<td class="wt-val wt-total">'+(twT?fmtMin(twT):'-')+'</td>';
-    h+='<td class="wt-val">'+(m.nw40?fmtMin(m.nw40):'-')+'</td>';
-    h+='<td class="wt-val">'+(m.nwOther?fmtMin(m.nwOther):'-')+'</td>';
-    h+='<td class="wt-val wt-total">'+(nwT?fmtMin(nwT):'-')+'</td>';
+    h+=cell(m.tw40m,m.tw40c,'tw40_'+m.id);
+    h+=cell(m.twOm,m.twOc,'twO_'+m.id);
+    h+='<td class="wt-val wt-total">'+(twT?((twTm?fmtMin(twTm)+' ':'')+'('+twT+'件)'):'-')+'</td>';
+    h+=cell(m.nw40m,m.nw40c,'nw40_'+m.id);
+    h+=cell(m.nwOm,m.nwOc,'nwO_'+m.id);
+    h+='<td class="wt-val wt-total">'+(nwT?((nwTm?fmtMin(nwTm)+' ':'')+'('+nwT+'件)'):'-')+'</td>';
     h+='</tr>';
+    if(S.weekDetail==='tw40_'+m.id)h+=detailRows(m.tw40t,7);
+    if(S.weekDetail==='twO_'+m.id)h+=detailRows(m.twOt,7);
+    if(S.weekDetail==='nw40_'+m.id)h+=detailRows(m.nw40t,7);
+    if(S.weekDetail==='nwO_'+m.id)h+=detailRows(m.nwOt,7);
   }
-  var twTot=tot.tw40+tot.twOther;var nwTot=tot.nw40+tot.nwOther;
   h+='<tr class="wt-foot"><td class="wt-name">合計</td>';
-  h+='<td class="wt-val">'+fmtMin(tot.tw40)+'</td><td class="wt-val">'+fmtMin(tot.twOther)+'</td><td class="wt-val wt-total">'+fmtMin(twTot)+'</td>';
-  h+='<td class="wt-val">'+fmtMin(tot.nw40)+'</td><td class="wt-val">'+fmtMin(tot.nwOther)+'</td><td class="wt-val wt-total">'+fmtMin(nwTot)+'</td>';
+  h+='<td class="wt-val">'+(tot.tw40c?(tot.tw40m?fmtMin(tot.tw40m)+' ':'')+'('+tot.tw40c+'件)':'-')+'</td>';
+  h+='<td class="wt-val">'+(tot.twOc?(tot.twOm?fmtMin(tot.twOm)+' ':'')+'('+tot.twOc+'件)':'-')+'</td>';
+  var twAll=tot.tw40m+tot.twOm;var twAllC=tot.tw40c+tot.twOc;
+  h+='<td class="wt-val wt-total">'+(twAllC?(twAll?fmtMin(twAll)+' ':'')+'('+twAllC+'件)':'-')+'</td>';
+  h+='<td class="wt-val">'+(tot.nw40c?(tot.nw40m?fmtMin(tot.nw40m)+' ':'')+'('+tot.nw40c+'件)':'-')+'</td>';
+  h+='<td class="wt-val">'+(tot.nwOc?(tot.nwOm?fmtMin(tot.nwOm)+' ':'')+'('+tot.nwOc+'件)':'-')+'</td>';
+  var nwAll=tot.nw40m+tot.nwOm;var nwAllC=tot.nw40c+tot.nwOc;
+  h+='<td class="wt-val wt-total">'+(nwAllC?(nwAll?fmtMin(nwAll)+' ':'')+'('+nwAllC+'件)':'-')+'</td>';
   h+='</tr></tbody></table></div>';
   return h;
 }
@@ -558,7 +733,7 @@ function render(){
   h+='<div class="nav">';
   h+='<span class="nav-label">VIEW</span>';
   h+='<div class="nav-group">';
-  h+='<button class="nav-btn '+(S.mode==="project"?"on":"")+'" onclick="S.mode=\'project\';S.sub=\'all\';S.openBlock=null;S.openMember=null;render()">プロジェクト別</button>';
+  h+='<button class="nav-btn '+(S.mode==="project"?"on":"")+'" onclick="S.mode=\'project\';S.sub=\'all\';S.openBlock=null;S.openMember=null;S.openSection=null;S.secBlock=null;render()">セクション別</button>';
   h+='<button class="nav-btn '+(S.mode==="member"?"on":"")+'" onclick="S.mode=\'member\';S.sub=\'all\';S.member=\'__all__\';S.openBlock=null;S.openMember=null;render()">メンバー</button>';
   h+='<button class="nav-btn '+(S.mode==="weekly"?"on":"")+'" onclick="S.mode=\'weekly\';render()">週間予定</button>';
   h+='</div>';
@@ -659,12 +834,12 @@ function render(){
 
   if(S.mode==="project"){
     h+='<div class="main">';
-    h+=renderProjectView(ts,S.sub);
+    h+=renderSectionView(ts,S.sub);
     h+='</div>';
   }
 
   if(S.mode==="member"&&S.sub==="all"){
-    h+=renderBlocks(ts,"all",true);
+    h+=renderBlocks(ts,"all","member");
   }
 
   if(S.mode==="member"&&S.sub==="each"){
@@ -673,16 +848,16 @@ function render(){
       h+='<div class="empty">上のメンバーを選択してください</div>';
     }else if(S.member==="__ua__"){
       memberTasks=ts.filter(function(t){return !gA(t);});
-      h+=renderBlocks(memberTasks,"ua",false);
+      h+=renderBlocks(memberTasks,"ua","project");
     }else{
       memberTasks=ts.filter(function(t){return gA(t)===S.member;});
-      h+=renderBlocks(memberTasks,"m"+S.member,false);
+      h+=renderBlocks(memberTasks,"m"+S.member,"project");
     }
   }
 
   if(S.mode==="weekly"){
     h+='<div class="main">';
-    h+=renderWeeklyView(ts);
+    h+=renderWeeklyView();
     h+='</div>';
   }
 
@@ -1175,10 +1350,10 @@ def send_slack_with_coaching(tasks, changes, collabs, projects, sections, dashbo
 
     return True
 
-def gen(projects, sections, tasks, collabs, logo_b64, changes=None, mode="all"):
+def gen(projects, sections, tasks, collabs, logo_b64, changes=None, mode="all", all_tasks=None, all_projects=None):
     now = datetime.now().strftime("%Y/%m/%d %H:%M")
     today = date.today()
-    for t in tasks:
+    for t in (all_tasks or tasks):
         if isinstance(t, dict) and "assignee_id" not in t and "responsible_uid" in t:
             t["assignee_id"] = t["responsible_uid"]
     data = {"projects":projects,"sections":sections,"tasks":tasks,
@@ -1189,6 +1364,8 @@ def gen(projects, sections, tasks, collabs, logo_b64, changes=None, mode="all"):
             "logo":logo_b64,
             "exclude_members":EXCLUDE_MEMBERS,
             "dashboard_mode": mode,
+            "all_tasks": all_tasks or tasks,
+            "all_projects": all_projects or projects,
             "changes":changes or []}
     html = HTML_TEMPLATE.replace("__DATA_PLACEHOLDER__", json.dumps(data, ensure_ascii=False))
     return html.replace("__ACCG_PREFIX__", ACCG_PREFIX)
@@ -1566,6 +1743,10 @@ def main():
     # --- Fetch data ---
     projects, sections, tasks, collabs = fetch(tok)
 
+    # Save unfiltered data for weekly view (needs both accounting and non-accounting)
+    all_tasks = list(tasks)
+    all_projects = list(projects)
+
     # --- Mode filtering ---
     projects, sections, tasks = filter_by_mode(projects, sections, tasks, mode)
 
@@ -1599,7 +1780,7 @@ def main():
 
     # --- Generate HTML ---
     print("  HTML生成中...")
-    html = gen(projects, sections, tasks, collabs, LOGO_B64, changes, mode=mode)
+    html = gen(projects, sections, tasks, collabs, LOGO_B64, changes, mode=mode, all_tasks=all_tasks, all_projects=all_projects)
 
     # Save HTML locally
     if mode == "all":
