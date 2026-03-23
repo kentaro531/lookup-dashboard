@@ -666,7 +666,8 @@ function renderWeeklyView(){
     if(cnt===0)return'<td class="wt-val">-</td>';
     var txt=mins?fmtMin(mins):'';
     txt+=(txt?' ':'')+'<span class="wt-cnt">('+cnt+'件)</span>';
-    return'<td class="wt-val wt-click" onclick="S.weekDetail=S.weekDetail===\''+key+'\'?null:\''+key+'\';render()">'+txt+'</td>';
+    var safeKey=key.replace(/'/g,"\\'");
+    return'<td class="wt-val wt-click" onclick="event.preventDefault();event.stopPropagation();S.weekDetail=S.weekDetail===\''+safeKey+'\'?null:\''+safeKey+'\';render()">'+txt+'</td>';
   }
   function detailRows(tasks,colSpan){
     if(!tasks.length)return'';
@@ -728,7 +729,7 @@ function render(){
 
   // Header
   var modeLabel=DATA.dashboard_mode==="accounting"?" [会計]":DATA.dashboard_mode==="non-accounting"?" [会計以外]":"";
-  var h='<div class="hdr">'+logoHtml+'<span class="logo-s">Dashboard v10'+modeLabel+'</span><span class="gen">'+DATA.generated+' | '+ts.length+' tasks</span></div>';
+  var h='<div class="hdr">'+logoHtml+'<span class="logo-s">Dashboard v10.1'+modeLabel+'</span><span class="gen">'+DATA.generated+' | '+ts.length+' tasks</span></div>';
 
   // Navigation
   h+='<div class="nav">';
@@ -1368,7 +1369,9 @@ def gen(projects, sections, tasks, collabs, logo_b64, changes=None, mode="all", 
             "all_tasks": all_tasks or tasks,
             "all_projects": all_projects or projects,
             "changes":changes or []}
-    html = HTML_TEMPLATE.replace("__DATA_PLACEHOLDER__", json.dumps(data, ensure_ascii=False))
+    # Escape </ in JSON to prevent HTML parser from closing <script> tag prematurely
+    json_str = json.dumps(data, ensure_ascii=False).replace("</", "<\\/")
+    html = HTML_TEMPLATE.replace("__DATA_PLACEHOLDER__", json_str)
     return html.replace("__ACCG_PREFIX__", ACCG_PREFIX)
 
 def slack_bot_post(bot_token, channel, text, thread_ts=None):
