@@ -224,6 +224,21 @@ body{background:var(--bg);color:var(--tx);font-family:'JetBrains Mono',monospace
 .chg-arrow{color:var(--txd);font-size:10px}
 .chg-date-old{color:var(--txd);text-decoration:line-through;font-size:10px}
 .chg-date-new{color:var(--or);font-weight:600;font-size:10px}
+.weekly-view{padding:12px 24px}
+.weekly-period{font-size:11px;color:var(--txm);margin-bottom:12px;font-weight:600}
+.weekly-tbl{width:100%;border-collapse:collapse;font-size:12px}
+.weekly-tbl thead{background:var(--sf)}
+.weekly-tbl th{padding:8px 10px;text-align:center;color:var(--txm);font-weight:600;border-bottom:1px solid var(--bd)}
+.weekly-tbl th.wt-name{text-align:left;min-width:100px}
+.weekly-tbl th.wt-grp{font-size:13px;color:var(--tx);padding:6px 10px}
+.weekly-tbl th.wt-sub{font-size:10px;color:var(--txd)}
+.weekly-tbl td{padding:7px 10px;border-bottom:1px solid var(--bd)}
+.weekly-tbl td.wt-name{color:var(--tx);font-weight:600;white-space:nowrap}
+.weekly-tbl td.wt-val{text-align:center;color:var(--txm)}
+.weekly-tbl td.wt-total,.weekly-tbl th.wt-total{font-weight:700;color:var(--tx)}
+.weekly-tbl tr:hover{background:var(--sfh)}
+.weekly-tbl tr.wt-foot{background:var(--sf);border-top:2px solid var(--bd)}
+.weekly-tbl tr.wt-foot td{font-weight:700;color:var(--ac)}
 .member-cards{display:flex;gap:8px;padding:12px 14px;flex-wrap:wrap}
 .m-card{min-width:120px;flex:1;max-width:200px;background:var(--bg);border:1px solid var(--bd);border-radius:8px;padding:10px 14px;cursor:pointer;transition:all .2s}
 .m-card:hover{border-color:var(--acl);transform:translateY(-1px)}
@@ -263,6 +278,18 @@ function isExcludedMember(aid){
   return false;
 }
 function isAccg(t){var p=projMap[t.project_id];return p&&p.name&&p.name.indexOf(ACCG_PREFIX)===0;}
+function isAcct40(t){var p=projMap[t.project_id];return p&&p.name&&p.name.substring(0,2)==="40";}
+function getWeekBounds(){
+  var today=new Date(DATA.today);
+  var dow=today.getDay();var diff=dow===0?6:dow-1;
+  var mon=new Date(today);mon.setDate(today.getDate()-diff);
+  var sun=new Date(mon);sun.setDate(mon.getDate()+6);
+  var nMon=new Date(mon);nMon.setDate(mon.getDate()+7);
+  var nSun=new Date(nMon);nSun.setDate(nMon.getDate()+6);
+  function fmt(d){return d.toISOString().split("T")[0];}
+  return{thisWeek:{start:fmt(mon),end:fmt(sun)},nextWeek:{start:fmt(nMon),end:fmt(nSun)}};
+}
+function inRange(d,s,e){return d&&d>=s&&d<=e;}
 
 function parseMinutes(labels){
   if(!labels||!labels.length)return 0;var total=0;
@@ -470,6 +497,55 @@ function getMembers(tasks){
   return result;
 }
 
+function renderWeeklyView(tasks){
+  var wb=getWeekBounds();
+  var members={};var excl=DATA.exclude_members||[];
+  function isExcl(nm){for(var i=0;i<excl.length;i++){if(nm.toLowerCase().indexOf(excl[i].toLowerCase())>=0)return true;}return false;}
+  for(var i=0;i<tasks.length;i++){
+    var t=tasks[i];var aid=gA(t);if(!aid)continue;
+    var c=DATA.collaborators[aid];if(!c)continue;
+    var nm=c.name||c.full_name||"";if(isExcl(nm))continue;
+    var dd=t.due?t.due.date:null;if(!dd)continue;
+    var mins=parseMinutes(t.labels);
+    var is40=isAcct40(t);
+    if(!members[aid])members[aid]={name:nm,tw40:0,twOther:0,nw40:0,nwOther:0};
+    var m=members[aid];
+    if(inRange(dd,wb.thisWeek.start,wb.thisWeek.end)){if(is40)m.tw40+=mins;else m.twOther+=mins;}
+    if(inRange(dd,wb.nextWeek.start,wb.nextWeek.end)){if(is40)m.nw40+=mins;else m.nwOther+=mins;}
+  }
+  var arr=[];for(var k in members)arr.push(members[k]);
+  arr.sort(function(a,b){return(b.tw40+b.twOther)-(a.tw40+a.twOther);});
+  var tot={tw40:0,twOther:0,nw40:0,nwOther:0};
+  for(var i=0;i<arr.length;i++){tot.tw40+=arr[i].tw40;tot.twOther+=arr[i].twOther;tot.nw40+=arr[i].nw40;tot.nwOther+=arr[i].nwOther;}
+  function fmtD(d){var p=d.split("-");return parseInt(p[1])+"/"+parseInt(p[2]);}
+  var h='<div class="weekly-view">';
+  h+='<div class="weekly-period">今週: '+fmtD(wb.thisWeek.start)+' ～ '+fmtD(wb.thisWeek.end)+'　　来週: '+fmtD(wb.nextWeek.start)+' ～ '+fmtD(wb.nextWeek.end)+'</div>';
+  h+='<table class="weekly-tbl"><thead>';
+  h+='<tr><th class="wt-name" rowspan="2">メンバー</th>';
+  h+='<th class="wt-grp" colspan="3" style="border-bottom:2px solid var(--ac)">今週</th>';
+  h+='<th class="wt-grp" colspan="3" style="border-bottom:2px solid var(--pu)">来週</th></tr>';
+  h+='<tr><th class="wt-sub">会計</th><th class="wt-sub">会計以外</th><th class="wt-sub wt-total">合計</th>';
+  h+='<th class="wt-sub">会計</th><th class="wt-sub">会計以外</th><th class="wt-sub wt-total">合計</th></tr>';
+  h+='</thead><tbody>';
+  for(var i=0;i<arr.length;i++){
+    var m=arr[i];var twT=m.tw40+m.twOther;var nwT=m.nw40+m.nwOther;
+    if(twT===0&&nwT===0)continue;
+    h+='<tr><td class="wt-name">'+esc(m.name)+'</td>';
+    h+='<td class="wt-val">'+(m.tw40?fmtMin(m.tw40):'-')+'</td>';
+    h+='<td class="wt-val">'+(m.twOther?fmtMin(m.twOther):'-')+'</td>';
+    h+='<td class="wt-val wt-total">'+(twT?fmtMin(twT):'-')+'</td>';
+    h+='<td class="wt-val">'+(m.nw40?fmtMin(m.nw40):'-')+'</td>';
+    h+='<td class="wt-val">'+(m.nwOther?fmtMin(m.nwOther):'-')+'</td>';
+    h+='<td class="wt-val wt-total">'+(nwT?fmtMin(nwT):'-')+'</td>';
+    h+='</tr>';
+  }
+  var twTot=tot.tw40+tot.twOther;var nwTot=tot.nw40+tot.nwOther;
+  h+='<tr class="wt-foot"><td class="wt-name">合計</td>';
+  h+='<td class="wt-val">'+fmtMin(tot.tw40)+'</td><td class="wt-val">'+fmtMin(tot.twOther)+'</td><td class="wt-val wt-total">'+fmtMin(twTot)+'</td>';
+  h+='<td class="wt-val">'+fmtMin(tot.nw40)+'</td><td class="wt-val">'+fmtMin(tot.nwOther)+'</td><td class="wt-val wt-total">'+fmtMin(nwTot)+'</td>';
+  h+='</tr></tbody></table></div>';
+  return h;
+}
 function render(){
   var ts=DATA.tasks;
   var logoHtml=DATA.logo?'<img src="data:image/png;base64,'+DATA.logo+'" style="height:26px" alt="LOOK UP">':'<span style="font-size:16px;font-weight:800">LOOK UP</span>';
@@ -484,6 +560,7 @@ function render(){
   h+='<div class="nav-group">';
   h+='<button class="nav-btn '+(S.mode==="project"?"on":"")+'" onclick="S.mode=\'project\';S.sub=\'all\';S.openBlock=null;S.openMember=null;render()">プロジェクト別</button>';
   h+='<button class="nav-btn '+(S.mode==="member"?"on":"")+'" onclick="S.mode=\'member\';S.sub=\'all\';S.member=\'__all__\';S.openBlock=null;S.openMember=null;render()">メンバー</button>';
+  h+='<button class="nav-btn '+(S.mode==="weekly"?"on":"")+'" onclick="S.mode=\'weekly\';render()">週間予定</button>';
   h+='</div>';
 
   if(S.mode==="project"){
@@ -601,6 +678,12 @@ function render(){
       memberTasks=ts.filter(function(t){return gA(t)===S.member;});
       h+=renderBlocks(memberTasks,"m"+S.member,false);
     }
+  }
+
+  if(S.mode==="weekly"){
+    h+='<div class="main">';
+    h+=renderWeeklyView(ts);
+    h+='</div>';
   }
 
   h+='</div>';
