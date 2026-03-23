@@ -545,7 +545,6 @@ function renderSectionView(tasks,filterMode){
   for(var i=0;i<secList.length;i++){
     var s=secList[i];
     var isOn=S.openSection===s.id;
-    var hasOv=s.ovCount>0;
     h+='<div class="sec-card'+(isOn?" active":"")+'" onclick="S.openSection=S.openSection===\''+s.id+'\'?null:\''+s.id+'\';S.secBlock=null;render()">';
     h+='<div class="sec-card-name">'+esc(s.name)+'</div>';
     if(s.projName&&filterMode!=="accg")h+='<div class="sec-card-proj">'+esc(s.projName)+'</div>';
@@ -553,9 +552,11 @@ function renderSectionView(tasks,filterMode){
     h+='<span class="sec-card-count">'+s.count+'件</span>';
     if(s.mins)h+='<span class="sec-card-time">'+fmtMin(s.mins)+'</span>';
     h+='</div>';
-    if(hasOv)h+='<div class="sec-card-badges"><span class="bg bg-r">超過'+s.ovCount+'</span>';
+    var hasBadge=s.ovCount>0||s.tdCount>0;
+    if(hasBadge){h+='<div class="sec-card-badges">';
+    if(s.ovCount)h+='<span class="bg bg-r">超過'+s.ovCount+'</span>';
     if(s.tdCount)h+='<span class="bg bg-o">今日'+s.tdCount+'</span>';
-    if(hasOv||s.tdCount)h+='</div>';
+    h+='</div>';}
     h+='</div>';
   }
   h+='</div>';
@@ -727,7 +728,7 @@ function render(){
 
   // Header
   var modeLabel=DATA.dashboard_mode==="accounting"?" [会計]":DATA.dashboard_mode==="non-accounting"?" [会計以外]":"";
-  var h='<div class="hdr">'+logoHtml+'<span class="logo-s">Dashboard'+modeLabel+'</span><span class="gen">'+DATA.generated+' | '+ts.length+' tasks</span></div>';
+  var h='<div class="hdr">'+logoHtml+'<span class="logo-s">Dashboard v10'+modeLabel+'</span><span class="gen">'+DATA.generated+' | '+ts.length+' tasks</span></div>';
 
   // Navigation
   h+='<div class="nav">';
