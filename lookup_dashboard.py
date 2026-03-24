@@ -240,15 +240,17 @@ body{background:var(--bg);color:var(--tx);font-family:'JetBrains Mono',monospace
 .weekly-tbl tr.wt-foot{background:var(--sf);border-top:2px solid var(--bd)}
 .weekly-tbl tr.wt-foot td{font-weight:700;color:var(--ac)}
 .wt-click{cursor:pointer;position:relative}
-.wt-click:hover{background:rgba(59,130,246,.15);border-radius:4px}
+.wt-click:hover{background:rgba(59,130,246,.15)}
+.wt-active{background:rgba(59,130,246,.2)!important;border-bottom:2px solid var(--ac)}
 .wt-cnt{font-size:10px;color:var(--txd)}
-.wt-detail-row td{padding:0!important;background:var(--bg)}
-.wt-detail{padding:8px 16px;max-height:300px;overflow-y:auto}
-.wt-detail-item{display:flex;gap:8px;padding:4px 8px;border-bottom:1px solid var(--bd);font-size:11px;align-items:center}
+.wt-detail-panel{margin:12px 0;border:1px solid var(--bd);border-radius:10px;background:var(--sf);overflow:hidden;max-height:400px;overflow-y:auto}
+.wt-detail-hdr{padding:10px 14px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--bd);background:rgba(59,130,246,.05)}
+.wt-detail-hdr>span:first-child{font-size:12px;font-weight:700;color:var(--tx)}
+.wt-detail-item{display:flex;gap:8px;padding:6px 14px;border-bottom:1px solid var(--bd);font-size:11px;align-items:center}
 .wt-detail-item:last-child{border-bottom:none}
 .wt-detail-date{color:var(--txd);min-width:40px;font-size:10px}
-.wt-detail-content{flex:1;color:var(--tx);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.wt-detail-proj{color:var(--txd);font-size:10px;max-width:120px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.wt-detail-content{flex:1;color:var(--tx);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.wt-detail-proj{color:var(--txd);font-size:10px;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .wt-detail-min{color:var(--ac);font-weight:600;font-size:10px;min-width:40px;text-align:right}
 .sec-cards{display:flex;gap:8px;padding:12px 24px;flex-wrap:wrap}
 .sec-card{background:var(--sf);border:1px solid var(--bd);border-radius:8px;padding:10px 14px;cursor:pointer;min-width:140px;max-width:200px;transition:all .15s}
@@ -659,34 +661,22 @@ function renderWeeklyView(){
   }
   var arr=[];for(var k in members)arr.push(members[k]);
   arr.sort(function(a,b){return(b.tw40c+b.twOc+b.nw40c+b.nwOc)-(a.tw40c+a.twOc+a.nw40c+a.nwOc);});
+  // Store for detail lookup by index
+  window._weekArr=arr;
   var tot={tw40m:0,tw40c:0,twOm:0,twOc:0,nw40m:0,nw40c:0,nwOm:0,nwOc:0};
   for(var i=0;i<arr.length;i++){var m=arr[i];tot.tw40m+=m.tw40m;tot.tw40c+=m.tw40c;tot.twOm+=m.twOm;tot.twOc+=m.twOc;tot.nw40m+=m.nw40m;tot.nw40c+=m.nw40c;tot.nwOm+=m.nwOm;tot.nwOc+=m.nwOc;}
   function fmtD(d){var p=d.split("-");return parseInt(p[1])+"/"+parseInt(p[2]);}
-  function cell(mins,cnt,key){
+  function cell(mins,cnt,idx,cat){
     if(cnt===0)return'<td class="wt-val">-</td>';
     var txt=mins?fmtMin(mins):'';
     txt+=(txt?' ':'')+'<span class="wt-cnt">('+cnt+'件)</span>';
-    var safeKey=key.replace(/'/g,"\\'");
-    return'<td class="wt-val wt-click" onclick="event.preventDefault();event.stopPropagation();S.weekDetail=S.weekDetail===\''+safeKey+'\'?null:\''+safeKey+'\';render()">'+txt+'</td>';
-  }
-  function detailRows(tasks,colSpan){
-    if(!tasks.length)return'';
-    var h='<tr class="wt-detail-row"><td colspan="'+colSpan+'"><div class="wt-detail">';
-    tasks.sort(function(a,b){return a.due<b.due?-1:a.due>b.due?1:0;});
-    for(var i=0;i<tasks.length;i++){
-      var t=tasks[i];
-      h+='<div class="wt-detail-item"><span class="wt-detail-date">'+fmtD(t.due)+'</span>';
-      h+='<span class="wt-detail-content">'+esc(t.content)+'</span>';
-      h+='<span class="wt-detail-proj">'+esc(t.project)+'</span>';
-      if(t.mins)h+='<span class="wt-detail-min">'+fmtMin(t.mins)+'</span>';
-      h+='</div>';
-    }
-    h+='</div></td></tr>';
-    return h;
+    var key=idx+'_'+cat;
+    var isActive=S.weekDetail===key;
+    return'<td class="wt-val wt-click'+(isActive?' wt-active':'')+'" data-wk="'+key+'">'+txt+'</td>';
   }
   var h='<div class="weekly-view">';
   h+='<div class="weekly-period">今週: '+fmtD(wb.thisWeek.start)+' ～ '+fmtD(wb.thisWeek.end)+'　　来週: '+fmtD(wb.nextWeek.start)+' ～ '+fmtD(wb.nextWeek.end)+'</div>';
-  h+='<table class="weekly-tbl"><thead>';
+  h+='<table class="weekly-tbl" id="weeklyTbl"><thead>';
   h+='<tr><th class="wt-name" rowspan="2">メンバー</th>';
   h+='<th class="wt-grp" colspan="3" style="border-bottom:2px solid var(--ac)">今週</th>';
   h+='<th class="wt-grp" colspan="3" style="border-bottom:2px solid var(--pu)">来週</th></tr>';
@@ -699,17 +689,13 @@ function renderWeeklyView(){
     if(twT===0&&nwT===0)continue;
     var twTm=m.tw40m+m.twOm;var nwTm=m.nw40m+m.nwOm;
     h+='<tr><td class="wt-name">'+esc(m.name)+'</td>';
-    h+=cell(m.tw40m,m.tw40c,'tw40_'+m.id);
-    h+=cell(m.twOm,m.twOc,'twO_'+m.id);
+    h+=cell(m.tw40m,m.tw40c,i,'tw40');
+    h+=cell(m.twOm,m.twOc,i,'twO');
     h+='<td class="wt-val wt-total">'+(twT?((twTm?fmtMin(twTm)+' ':'')+'('+twT+'件)'):'-')+'</td>';
-    h+=cell(m.nw40m,m.nw40c,'nw40_'+m.id);
-    h+=cell(m.nwOm,m.nwOc,'nwO_'+m.id);
+    h+=cell(m.nw40m,m.nw40c,i,'nw40');
+    h+=cell(m.nwOm,m.nwOc,i,'nwO');
     h+='<td class="wt-val wt-total">'+(nwT?((nwTm?fmtMin(nwTm)+' ':'')+'('+nwT+'件)'):'-')+'</td>';
     h+='</tr>';
-    if(S.weekDetail==='tw40_'+m.id)h+=detailRows(m.tw40t,7);
-    if(S.weekDetail==='twO_'+m.id)h+=detailRows(m.twOt,7);
-    if(S.weekDetail==='nw40_'+m.id)h+=detailRows(m.nw40t,7);
-    if(S.weekDetail==='nwO_'+m.id)h+=detailRows(m.nwOt,7);
   }
   h+='<tr class="wt-foot"><td class="wt-name">合計</td>';
   h+='<td class="wt-val">'+(tot.tw40c?(tot.tw40m?fmtMin(tot.tw40m)+' ':'')+'('+tot.tw40c+'件)':'-')+'</td>';
@@ -720,7 +706,34 @@ function renderWeeklyView(){
   h+='<td class="wt-val">'+(tot.nwOc?(tot.nwOm?fmtMin(tot.nwOm)+' ':'')+'('+tot.nwOc+'件)':'-')+'</td>';
   var nwAll=tot.nw40m+tot.nwOm;var nwAllC=tot.nw40c+tot.nwOc;
   h+='<td class="wt-val wt-total">'+(nwAllC?(nwAll?fmtMin(nwAll)+' ':'')+'('+nwAllC+'件)':'-')+'</td>';
-  h+='</tr></tbody></table></div>';
+  h+='</tr></tbody></table>';
+  // Detail panel below table
+  if(S.weekDetail&&window._weekArr){
+    var parts=S.weekDetail.split('_');
+    var idx=parseInt(parts[0]);var cat=parts.slice(1).join('_');
+    var dm=window._weekArr[idx];
+    if(dm){
+      var tasks=cat==='tw40'?dm.tw40t:cat==='twO'?dm.twOt:cat==='nw40'?dm.nw40t:cat==='nwO'?dm.nwOt:[];
+      var catLabel=cat==='tw40'?'今週・会計':cat==='twO'?'今週・会計以外':cat==='nw40'?'来週・会計':cat==='nwO'?'来週・会計以外':'';
+      if(tasks.length){
+        tasks.sort(function(a,b){return a.due<b.due?-1:a.due>b.due?1:0;});
+        h+='<div class="wt-detail-panel">';
+        h+='<div class="wt-detail-hdr"><span>'+esc(dm.name)+' ― '+catLabel+' ('+tasks.length+'件)</span>';
+        h+='<span class="detail-close" onclick="S.weekDetail=null;render()">&#10005;</span></div>';
+        for(var ti=0;ti<tasks.length;ti++){
+          var t=tasks[ti];
+          h+='<div class="wt-detail-item">';
+          h+='<span class="wt-detail-date">'+fmtD(t.due)+'</span>';
+          h+='<span class="wt-detail-content">'+esc(t.content)+'</span>';
+          h+='<span class="wt-detail-proj">'+esc(t.project)+'</span>';
+          if(t.mins)h+='<span class="wt-detail-min">'+fmtMin(t.mins)+'</span>';
+          h+='</div>';
+        }
+        h+='</div>';
+      }
+    }
+  }
+  h+='</div>';
   return h;
 }
 function render(){
@@ -729,7 +742,7 @@ function render(){
 
   // Header
   var modeLabel=DATA.dashboard_mode==="accounting"?" [会計]":DATA.dashboard_mode==="non-accounting"?" [会計以外]":"";
-  var h='<div class="hdr">'+logoHtml+'<span class="logo-s">Dashboard v10.1'+modeLabel+'</span><span class="gen">'+DATA.generated+' | '+ts.length+' tasks</span></div>';
+  var h='<div class="hdr">'+logoHtml+'<span class="logo-s">Dashboard v10.2'+modeLabel+'</span><span class="gen">'+DATA.generated+' | '+ts.length+' tasks</span></div>';
 
   // Navigation
   h+='<div class="nav">';
@@ -865,6 +878,15 @@ function render(){
 
   h+='</div>';
   document.getElementById("app").innerHTML=h;
+  // Event delegation for weekly table cells
+  var wt=document.getElementById("weeklyTbl");
+  if(wt){wt.addEventListener("click",function(e){
+    var td=e.target.closest("[data-wk]");
+    if(!td)return;
+    var key=td.getAttribute("data-wk");
+    S.weekDetail=S.weekDetail===key?null:key;
+    render();
+  });}
 }
 render();
 </script></body></html>'''
