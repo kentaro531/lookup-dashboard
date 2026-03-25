@@ -23,7 +23,7 @@ def get_snapshot_dir():
     return base
 ANTHROPIC_API = "https://api.anthropic.com/v1/messages"
 SLACK_API = "https://slack.com/api"
-EXCLUDE_PROJECTS = ["00_LIFE"]
+EXCLUDE_PROJECTS = ["00_LIFE", "Inbox"]
 ACCG_PREFIX = "40_ACCG_"
 ACCOUNTING_PROJECT_PREFIX = "40"
 EXCLUDE_MEMBERS = ["Nao Matsumoto", "迫田昂輝", "Shihomi Okit", "米満"]
@@ -99,8 +99,28 @@ def fetch_all_pages(endpoint, token):
     return all_items
 def fetch(tok):
     print("  プロジェクト..."); projects = fetch_all_pages("projects", tok); print(f"    {len(projects)}件")
+    # Filter out archived projects
+    archived_ids = set()
+    for p in projects:
+        if isinstance(p, dict) and p.get("is_archived"):
+            archived_ids.add(p.get("id"))
+    if archived_ids:
+        print(f"    アーカイブ済み除外: {len(archived_ids)}件")
+        projects = [p for p in projects if isinstance(p, dict) and p.get("id") not in archived_ids]
+    # Filter out Inbox projects
+    inbox_ids = set()
+    for p in projects:
+        if isinstance(p, dict) and p.get("is_inbox_project"):
+            inbox_ids.add(p.get("id")); print(f"    除外(Inbox): {p.get('name')}")
+    if inbox_ids:
+        projects = [p for p in projects if isinstance(p, dict) and p.get("id") not in inbox_ids]
     print("  セクション..."); sections = fetch_all_pages("sections", tok); print(f"    {len(sections)}件")
     print("  タスク..."); tasks = fetch_all_pages("tasks", tok); print(f"    {len(tasks)}件")
+    # Remove tasks from archived/inbox projects
+    skip_pids = archived_ids | inbox_ids
+    if skip_pids:
+        tasks = [t for t in tasks if isinstance(t, dict) and t.get("project_id") not in skip_pids]
+        sections = [s for s in sections if isinstance(s, dict) and s.get("project_id") not in skip_pids]
     print("  メンバー...")
     collabs = {}
     for p in projects:
@@ -635,6 +655,8 @@ function renderWeeklyView(){
   var allTasks=DATA.all_tasks||DATA.tasks;
   var allProj={};if(DATA.all_projects)for(var i=0;i<DATA.all_projects.length;i++)allProj[DATA.all_projects[i].id]=DATA.all_projects[i];
   else allProj=projMap;
+  var allSec={};if(DATA.all_sections)for(var i=0;i<DATA.all_sections.length;i++)allSec[DATA.all_sections[i].id]=DATA.all_sections[i];
+  else allSec=secMap;
   function is40(t){var p=allProj[t.project_id];return p&&p.name&&p.name.substring(0,2)==="40";}
   var wb=getWeekBounds();
   var excl=DATA.exclude_members||[];
@@ -649,7 +671,8 @@ function renderWeeklyView(){
     if(!members[aid])members[aid]={id:aid,name:nm,tw40m:0,tw40c:0,tw40t:[],twOm:0,twOc:0,twOt:[],nw40m:0,nw40c:0,nw40t:[],nwOm:0,nwOc:0,nwOt:[]};
     var m=members[aid];
     var pn=allProj[t.project_id]?allProj[t.project_id].name:"";
-    var info={content:t.content,project:pn,mins:mins,due:dd};
+    var sn=t.section_id&&allSec[t.section_id]?allSec[t.section_id].name:"";
+    var info={content:t.content,section:sn||pn,mins:mins,due:dd};
     if(inRange(dd,wb.thisWeek.start,wb.thisWeek.end)){
       if(a40){m.tw40m+=mins;m.tw40c++;m.tw40t.push(info);}
       else{m.twOm+=mins;m.twOc++;m.twOt.push(info);}
@@ -725,7 +748,7 @@ function renderWeeklyView(){
           h+='<div class="wt-detail-item">';
           h+='<span class="wt-detail-date">'+fmtD(t.due)+'</span>';
           h+='<span class="wt-detail-content">'+esc(t.content)+'</span>';
-          h+='<span class="wt-detail-proj">'+esc(t.project)+'</span>';
+          h+='<span class="wt-detail-proj">'+esc(t.section)+'</span>';
           if(t.mins)h+='<span class="wt-detail-min">'+fmtMin(t.mins)+'</span>';
           h+='</div>';
         }
@@ -742,7 +765,7 @@ function render(){
 
   // Header
   var modeLabel=DATA.dashboard_mode==="accounting"?" [会計]":DATA.dashboard_mode==="non-accounting"?" [会計以外]":"";
-  var h='<div class="hdr">'+logoHtml+'<span class="logo-s">Dashboard v10.2'+modeLabel+'</span><span class="gen">'+DATA.generated+' | '+ts.length+' tasks</span></div>';
+  var h='<div class="hdr">'+logoHtml+'<span class="logo-s">Dashboard v10.4'+modeLabel+'</span><span class="gen">'+DATA.generated+' | '+ts.length+' tasks</span></div>';
 
   // Navigation
   h+='<div class="nav">';
@@ -1374,7 +1397,7 @@ def send_slack_with_coaching(tasks, changes, collabs, projects, sections, dashbo
 
     return True
 
-def gen(projects, sections, tasks, collabs, logo_b64, changes=None, mode="all", all_tasks=None, all_projects=None):
+def gen(projects, sections, tasks, collabs, logo_b64, changes=None, mode="all", all_tasks=None, all_projects=None, all_sections=None):
     now = datetime.now().strftime("%Y/%m/%d %H:%M")
     today = date.today()
     for t in (all_tasks or tasks):
@@ -1390,6 +1413,7 @@ def gen(projects, sections, tasks, collabs, logo_b64, changes=None, mode="all", 
             "dashboard_mode": mode,
             "all_tasks": all_tasks or tasks,
             "all_projects": all_projects or projects,
+            "all_sections": all_sections or sections,
             "changes":changes or []}
     # Escape </ in JSON to prevent HTML parser from closing <script> tag prematurely
     json_str = json.dumps(data, ensure_ascii=False).replace("</", "<\\/")
@@ -1772,6 +1796,7 @@ def main():
     # Save unfiltered data for weekly view (needs both accounting and non-accounting)
     all_tasks = list(tasks)
     all_projects = list(projects)
+    all_sections = list(sections)
 
     # --- Mode filtering ---
     projects, sections, tasks = filter_by_mode(projects, sections, tasks, mode)
@@ -1806,7 +1831,7 @@ def main():
 
     # --- Generate HTML ---
     print("  HTML生成中...")
-    html = gen(projects, sections, tasks, collabs, LOGO_B64, changes, mode=mode, all_tasks=all_tasks, all_projects=all_projects)
+    html = gen(projects, sections, tasks, collabs, LOGO_B64, changes, mode=mode, all_tasks=all_tasks, all_projects=all_projects, all_sections=all_sections)
 
     # Save HTML locally
     if mode == "all":
