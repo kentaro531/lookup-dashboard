@@ -4,8 +4,19 @@ LOOK UP Todoist Dashboard v8
 python3 lookup_dashboard.py
 """
 import json, sys, webbrowser, urllib.request, urllib.error, ssl, base64, os
-from datetime import datetime, date, timedelta
+from datetime import datetime, date, timedelta, timezone
 from pathlib import Path
+
+# JST timezone (+9:00)
+JST = timezone(timedelta(hours=9))
+
+def now_jst():
+    """Get current datetime in JST."""
+    return datetime.now(JST)
+
+def today_jst():
+    """Get current date in JST."""
+    return now_jst().date()
 
 CONFIG = Path.home() / ".lookup_dashboard_config.json"
 OUTPUT = Path.home() / "Desktop" / "LOOK_UP_Dashboard.html"
@@ -765,7 +776,7 @@ function render(){
 
   // Header
   var modeLabel=DATA.dashboard_mode==="accounting"?" [会計]":DATA.dashboard_mode==="non-accounting"?" [会計以外]":"";
-  var h='<div class="hdr">'+logoHtml+'<span class="logo-s">Dashboard v10.4'+modeLabel+'</span><span class="gen">'+DATA.generated+' | '+ts.length+' tasks</span></div>';
+  var h='<div class="hdr">'+logoHtml+'<span class="logo-s">Dashboard v10.5'+modeLabel+'</span><span class="gen">'+DATA.generated+' | '+ts.length+' tasks</span></div>';
 
   // Navigation
   h+='<div class="nav">';
@@ -931,7 +942,7 @@ def save_snapshot(tasks):
             "assignee_id": str(t.get("assignee_id") or t.get("responsible_uid") or ""),
             "priority": t.get("priority",1),
         }
-    today_str = date.today().isoformat()
+    today_str = today_jst().isoformat()
     filepath = get_snapshot_dir() / f"snapshot_{today_str}.json"
     filepath.write_text(json.dumps(snapshot, ensure_ascii=False))
     # Keep only last 14 days of snapshots
@@ -942,7 +953,7 @@ def save_snapshot(tasks):
 def load_previous_snapshot():
     """Load the most recent snapshot before today."""
     if not get_snapshot_dir().exists(): return None, None
-    today_str = date.today().isoformat()
+    today_str = today_jst().isoformat()
     files = sorted(get_snapshot_dir().glob("snapshot_*.json"))
     for f in reversed(files):
         snap_date = f.stem.replace("snapshot_","")
@@ -1015,7 +1026,7 @@ def deploy_github(html_content, filename="index.html"):
 
     # Upload/update file
     payload = {
-        "message": f"Dashboard update {datetime.now().strftime('%Y-%m-%d %H:%M')}",
+        "message": f"Dashboard update {now_jst().strftime('%Y-%m-%d %H:%M')}",
         "content": b64mod.b64encode(html_content.encode("utf-8")).decode("ascii"),
     }
     if sha:
@@ -1082,8 +1093,8 @@ def call_claude(api_key, prompt, max_tokens=500):
 def build_member_data(tasks, changes, collabs, projects, sections):
     """Build per-member task summary for coaching."""
     import re as re_mod
-    td = date.today().isoformat()
-    tm = (date.today() + timedelta(days=1)).isoformat()
+    td = today_jst().isoformat()
+    tm = (today_jst() + timedelta(days=1)).isoformat()
     proj_map = {p["id"]:p for p in projects if isinstance(p,dict)}
     sec_map = {s["id"]:s for s in sections if isinstance(s,dict)}
 
@@ -1115,7 +1126,7 @@ def build_member_data(tasks, changes, collabs, projects, sections):
     def days_overdue(d):
         try:
             y,mo,dy = d.split("-")
-            diff = (date.today() - date(int(y),int(mo),int(dy))).days
+            diff = (today_jst() - date(int(y),int(mo),int(dy))).days
             return max(0, diff)
         except: return 0
 
@@ -1171,8 +1182,8 @@ def build_member_data(tasks, changes, collabs, projects, sections):
 
 def build_summary_message(tasks, changes, sec_map, members=None, dashboard_url=None):
     """Build parent summary message with score ranking."""
-    td = date.today().isoformat()
-    tm = (date.today() + timedelta(days=1)).isoformat()
+    td = today_jst().isoformat()
+    tm = (today_jst() + timedelta(days=1)).isoformat()
 
     def fmtD_short(d):
         if not d: return ""
@@ -1194,7 +1205,7 @@ def build_summary_message(tasks, changes, sec_map, members=None, dashboard_url=N
     today_count = sum(1 for t in tasks if isinstance(t,dict) and t.get("due") and isinstance(t["due"],dict) and t["due"].get("date","") == td)
     tomorrow_count = sum(1 for t in tasks if isinstance(t,dict) and t.get("due") and isinstance(t["due"],dict) and t["due"].get("date","") == tm)
 
-    now = datetime.now().strftime("%m/%d %H:%M")
+    now = now_jst().strftime("%m/%d %H:%M")
     td_name = fmtD_short(td)
     lines = [
         f":bar_chart:  *LOOK UP タスクダッシュボード*　{td_name} {now}",
@@ -1398,8 +1409,8 @@ def send_slack_with_coaching(tasks, changes, collabs, projects, sections, dashbo
     return True
 
 def gen(projects, sections, tasks, collabs, logo_b64, changes=None, mode="all", all_tasks=None, all_projects=None, all_sections=None):
-    now = datetime.now().strftime("%Y/%m/%d %H:%M")
-    today = date.today()
+    now = now_jst().strftime("%Y/%m/%d %H:%M")
+    today = today_jst()
     for t in (all_tasks or tasks):
         if isinstance(t, dict) and "assignee_id" not in t and "responsible_uid" in t:
             t["assignee_id"] = t["responsible_uid"]
@@ -1444,7 +1455,7 @@ def slack_bot_post(bot_token, channel, text, thread_ts=None):
 
 def generate_coaching_comment(anthropic_key, member_name, member_data, sec_map):
     """Call Claude API to generate a coaching comment for a member."""
-    td = date.today().isoformat()
+    td = today_jst().isoformat()
 
     def fmt_min(m):
         if m >= 60:
@@ -1531,8 +1542,8 @@ def send_slack_with_threads(tasks, changes, collabs, projects, sections, dashboa
             except: pass
         return False
 
-    td = date.today().isoformat()
-    tm = (date.today() + timedelta(days=1)).isoformat()
+    td = today_jst().isoformat()
+    tm = (today_jst() + timedelta(days=1)).isoformat()
     proj_map = {p["id"]:p for p in projects if isinstance(p,dict)}
     sec_map_local = {s["id"]:s for s in sections if isinstance(s,dict)}
 
@@ -1565,7 +1576,7 @@ def send_slack_with_threads(tasks, changes, collabs, projects, sections, dashboa
         if not d: return 0
         try:
             y,mo,day = d.split("-")
-            diff = (date.today() - date(int(y),int(mo),int(day))).days
+            diff = (today_jst() - date(int(y),int(mo),int(day))).days
             return max(0, diff)
         except: return 0
 
@@ -1575,7 +1586,7 @@ def send_slack_with_threads(tasks, changes, collabs, projects, sections, dashboa
     today_count = sum(1 for t in tasks if isinstance(t,dict) and t.get("due") and isinstance(t["due"],dict) and t["due"].get("date","") == td)
     tomorrow_count = sum(1 for t in tasks if isinstance(t,dict) and t.get("due") and isinstance(t["due"],dict) and t["due"].get("date","") == tm)
 
-    now = datetime.now().strftime("%Y/%m/%d %H:%M")
+    now = now_jst().strftime("%Y/%m/%d %H:%M")
     lines = [
         f":bar_chart: *LOOK UP タスクダッシュボード* ({now}更新)",
         "━━━━━━━━━━━━━━━━━━━━",
@@ -1801,7 +1812,7 @@ def main():
     # --- Mode filtering ---
     projects, sections, tasks = filter_by_mode(projects, sections, tasks, mode)
 
-    td = date.today().isoformat()
+    td = today_jst().isoformat()
     ov = sum(1 for t in tasks if isinstance(t,dict) and t.get("due") and isinstance(t["due"],dict) and t["due"].get("date","") < td)
     print(f"\n  合計: {len(tasks)}タスク / {ov}件超過 （{mode_label}）")
 
