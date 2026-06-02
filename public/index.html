@@ -1,0 +1,427 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LOOK UP Light — Pipeline</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Zen+Kaku+Gothic+New:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#0B1220;--ink-soft:#1E293B;--brand:#2563EB;--brand-700:#1D4ED8;--brand-900:#1E3A8A;
+    --brand-50:#EFF4FF;--brand-100:#DBE6FF;--muted:#697586;--faint:#9AA4B2;
+    --bg:#FFFFFF;--soft:#F6F8FC;--soft2:#F0F4FA;--line:#E9EEF5;--line-2:#EEF2F8;
+    --ok:#0F9D77;--ok-bg:#ECFDF6;--warn:#D97706;--warn-bg:#FFFAEC;--bad:#E23D52;--bad-bg:#FEF1F2;
+    --en:'Plus Jakarta Sans',sans-serif;--jp:'Zen Kaku Gothic New',sans-serif;
+    --sh:0 1px 2px rgba(11,18,32,.04),0 6px 22px rgba(11,18,32,.05);
+    --sh-lg:0 2px 6px rgba(11,18,32,.05),0 18px 48px rgba(30,58,138,.10);
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:var(--jp);background:var(--bg);color:var(--ink);-webkit-font-smoothing:antialiased;line-height:1.6}
+  .num{font-family:var(--en);font-variant-numeric:tabular-nums}
+  .en{font-family:var(--en)} .wrap{max-width:1180px;margin:0 auto;padding:0 28px}
+
+  .hero{position:relative;color:#fff;overflow:hidden;background:
+      radial-gradient(120% 120% at 85% 0%,rgba(59,130,246,.55),transparent 55%),
+      radial-gradient(90% 90% at 0% 100%,rgba(37,99,235,.35),transparent 60%),
+      linear-gradient(135deg,#0B1220 0%,#13224A 55%,#1E3A8A 100%)}
+  .hero::before{content:"";position:absolute;inset:0;background-image:radial-gradient(rgba(255,255,255,.06) 1px,transparent 1px);background-size:22px 22px;opacity:.5}
+  .hero::after{content:"";position:absolute;width:520px;height:520px;right:-120px;top:-180px;border-radius:50%;background:radial-gradient(circle,rgba(94,234,212,.18),transparent 60%);animation:float 14s ease-in-out infinite}
+  @keyframes float{50%{transform:translate(-26px,34px)}}
+  .nav{display:flex;align-items:center;justify-content:space-between;padding:22px 0;position:relative;z-index:2}
+  .brand{display:flex;align-items:center;gap:12px}
+  .logo{width:40px;height:40px;border-radius:11px;background:rgba(255,255,255,.12);display:grid;place-items:center;border:1px solid rgba(255,255,255,.22)}
+  .logo svg{width:21px;height:21px}
+  .brand .bn{font-family:var(--en);font-weight:700;font-size:15.5px;letter-spacing:.4px}
+  .brand .bn small{display:block;font-family:var(--jp);font-weight:400;font-size:11px;color:rgba(255,255,255,.7);letter-spacing:0;margin-top:1px}
+  .nav .meta{font-family:var(--en);font-size:12px;color:rgba(255,255,255,.78);text-align:right}
+  .nav .meta b{display:block;color:#fff;font-weight:600;font-size:13px;margin-top:2px}
+  .hero-body{position:relative;z-index:2;padding:30px 0 130px}
+  .eyebrow{font-family:var(--en);font-size:12px;letter-spacing:3px;text-transform:uppercase;color:#93C5FD;font-weight:600}
+  .hero h1{font-family:var(--en);font-weight:800;font-size:clamp(40px,7vw,72px);line-height:1.02;letter-spacing:-2px;margin:16px 0 0}
+  .hero h1 .accent{background:linear-gradient(90deg,#93C5FD,#5EEAD4);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+  .hero .lead{font-family:var(--jp);font-size:15.5px;color:rgba(255,255,255,.82);margin-top:20px;max-width:520px;line-height:1.8}
+  .hero .chip{display:inline-flex;align-items:center;gap:7px;margin-top:22px;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);padding:7px 14px;border-radius:999px;font-size:12.5px;font-family:var(--en)}
+  .live{width:7px;height:7px;border-radius:50%;background:#5EEAD4;box-shadow:0 0 0 4px rgba(94,234,212,.22);animation:pulse 2s infinite}
+  @keyframes pulse{50%{box-shadow:0 0 0 7px rgba(94,234,212,0)}}
+
+  .goal{margin-top:-86px;position:relative;z-index:3;background:#fff;border-radius:22px;box-shadow:var(--sh-lg);border:1px solid var(--line);padding:26px 30px;display:flex;align-items:center;gap:32px;flex-wrap:wrap;opacity:0;transform:translateY(12px)}
+  .goal.in{animation:rise .6s forwards}
+  .goal .gl{font-family:var(--en);font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--faint);font-weight:700}
+  .goal .gv{font-family:var(--en);font-weight:800;font-size:40px;letter-spacing:-1.5px;line-height:1;margin-top:7px}
+  .goal .gv small{font-size:18px;color:var(--faint);font-weight:700}
+  .goal .bar-wrap{flex:1;min-width:260px}
+  .goal .bt{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:9px;font-size:13px;color:var(--muted)}
+  .goal .bt b{font-family:var(--en);color:var(--ink);font-weight:700;font-size:14px}
+  .track{height:14px;background:var(--soft2);border-radius:999px;overflow:hidden}
+  .track .fill{height:100%;width:0;border-radius:999px;background:linear-gradient(90deg,#1E3A8A,#3B82F6 70%,#5EEAD4);transition:width 1.4s cubic-bezier(.16,1,.3,1)}
+  .cheer{font-family:var(--jp);font-weight:700;font-size:14px;color:var(--brand);white-space:nowrap}
+
+  .shead{margin:62px 0 22px}
+  .shead .lab{font-family:var(--jp);font-size:12.5px;color:var(--brand);font-weight:700;letter-spacing:.5px}
+  .shead h2{font-family:var(--en);font-weight:800;font-size:31px;letter-spacing:-1px;margin-top:5px}
+  .shead .sub{font-size:13px;color:var(--muted);margin-top:5px}
+
+  .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:18px}
+  .kpi{background:#fff;border:1px solid var(--line);border-radius:20px;padding:22px;box-shadow:var(--sh);position:relative;overflow:hidden;opacity:0;transform:translateY(12px)}
+  .kpi.in{animation:rise .55s forwards}
+  .kpi.clickable{cursor:pointer;transition:transform .18s,box-shadow .18s,border-color .18s}
+  .kpi.clickable:hover{transform:translateY(-3px);box-shadow:var(--sh-lg);border-color:var(--brand-100)}
+  .kpi .more{position:absolute;top:16px;right:18px;font-family:var(--en);font-size:11px;font-weight:700;color:var(--brand);opacity:0;transition:opacity .18s}
+  .kpi.clickable:hover .more{opacity:1}
+  .kpi .lab{display:flex;align-items:center;justify-content:space-between}
+  .kpi .lab .jp{font-size:13px;color:var(--muted);font-weight:500}
+  .kpi .lab .en{font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--faint);font-weight:700}
+  .kpi .val{font-family:var(--en);font-weight:800;font-size:46px;letter-spacing:-2px;line-height:1;margin:14px 0 0}
+  .kpi .val small{font-size:20px;color:var(--faint);font-weight:700}
+  .kpi .foot{margin-top:12px;display:flex;align-items:center;gap:7px;font-size:12px;color:var(--muted);font-family:var(--en)}
+  .trend{display:inline-flex;align-items:center;gap:3px;font-weight:700;padding:3px 8px;border-radius:8px;font-size:11.5px}
+  .trend.up{color:var(--ok);background:var(--ok-bg)}.trend.flat{color:var(--muted);background:var(--soft2)}.trend.down{color:var(--bad);background:var(--bad-bg)}
+  .kpi .glow{position:absolute;right:-30px;bottom:-30px;width:120px;height:120px;border-radius:50%;background:radial-gradient(circle,var(--brand-50),transparent 70%)}
+
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+  .card{background:#fff;border:1px solid var(--line);border-radius:20px;box-shadow:var(--sh);padding:24px 26px;opacity:0;transform:translateY(12px)}
+  .card.in{animation:rise .55s forwards}
+  .card .ct{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:3px}
+  .card .ct h3{font-family:var(--en);font-weight:700;font-size:17px;letter-spacing:-.3px}
+  .card .ct .jp{font-family:var(--jp);font-size:12px;color:var(--faint);font-weight:500}
+  .card .hint{font-size:12px;color:var(--faint);margin-bottom:20px}
+
+  .funnel{display:flex;flex-direction:column;gap:4px}
+  .fbar{height:56px;border-radius:13px;display:flex;align-items:center;justify-content:space-between;padding:0 18px;color:#fff;transform:scaleX(0);transform-origin:left;transition:transform .9s cubic-bezier(.16,1,.3,1)}
+  .fbar.in{transform:scaleX(1)}
+  .fbar .fl{font-size:13px;font-weight:500;opacity:.97}
+  .fbar .fl .en{font-size:10px;letter-spacing:1px;text-transform:uppercase;opacity:.8;display:block;margin-bottom:1px}
+  .fbar .fn{font-family:var(--en);font-weight:800;font-size:24px;letter-spacing:-.5px}
+  .conv{display:flex;align-items:center;gap:8px;padding:6px 18px;font-family:var(--en);font-size:12px;color:var(--muted)}
+  .conv .pct{font-weight:800;color:var(--ink)}.conv.drop .pct{color:var(--warn)}.conv .jp{font-family:var(--jp)}
+
+  .chart-box{position:relative;height:252px}
+  .chart-fallback{height:252px;display:flex;align-items:center;justify-content:center;text-align:center;color:var(--faint);font-size:13px;background:var(--soft);border-radius:12px;padding:20px}
+
+  .frow{display:flex;align-items:center;gap:15px;margin-bottom:15px}
+  .frow .fn{width:130px;font-size:12.5px;color:var(--ink-soft);font-weight:500;flex-shrink:0}
+  .ft{flex:1;height:12px;background:var(--soft2);border-radius:999px;overflow:hidden}
+  .ff{height:100%;width:0;border-radius:999px;transition:width 1.1s cubic-bezier(.16,1,.3,1)}
+  .fp{width:44px;text-align:right;font-family:var(--en);font-weight:700;font-size:13px}
+  .ff.g{background:linear-gradient(90deg,#0F9D77,#34D399)}.fp.g{color:var(--ok)}
+  .ff.y{background:linear-gradient(90deg,#D97706,#FBBF24)}.fp.y{color:var(--warn)}
+  .ff.r{background:linear-gradient(90deg,#E23D52,#FB7185)}.fp.r{color:var(--bad)}
+  .note{margin-top:8px;font-size:12px;color:var(--ink-soft);background:var(--bad-bg);border:1px solid #FAD2D7;border-radius:12px;padding:11px 14px;display:flex;gap:9px;align-items:flex-start}
+  .note b{color:var(--bad)}
+
+  .flist{display:flex;flex-direction:column}
+  .fitem{display:flex;align-items:center;gap:13px;padding:13px 2px;border-bottom:1px solid var(--line-2)}
+  .fitem:last-child{border-bottom:0}
+  .fid{font-family:var(--en);font-size:11px;color:var(--faint);font-weight:700;width:46px;flex-shrink:0}
+  .fco{flex:1;font-size:13px;font-weight:500}.fco .who{font-size:11.5px;color:var(--faint);font-weight:400;margin-top:1px}
+  .bdg{font-size:11px;font-weight:700;padding:4px 10px;border-radius:8px;white-space:nowrap}
+  .bdg.ob{color:var(--brand-700);background:var(--brand-50)}.bdg.ac{color:var(--ok);background:var(--ok-bg)}.bdg.gr{color:var(--faint);background:var(--soft2)}
+  .miss{font-size:11px;color:var(--bad);font-weight:700;font-family:var(--en);white-space:nowrap}
+  .empty{text-align:center;color:var(--ok);font-weight:700;padding:28px 0;font-size:14px}
+
+  .lc{display:grid;grid-template-columns:repeat(7,1fr);gap:12px}
+  .lcell{background:#fff;border:1px solid var(--line);border-radius:16px;padding:16px 10px;text-align:center;box-shadow:var(--sh);opacity:0;transform:translateY(10px)}
+  .lcell.in{animation:rise .5s forwards}
+  .lcell .ln{font-family:var(--en);font-weight:800;font-size:28px;letter-spacing:-1px}
+  .lcell .ll{font-size:11px;color:var(--muted);margin-top:4px;font-weight:500}
+  .lcell .lbar{height:3px;border-radius:2px;margin-top:11px;background:var(--brand)}
+
+  footer{margin-top:74px;background:var(--soft);border-top:1px solid var(--line)}
+  .foot-in{max-width:1180px;margin:0 auto;padding:40px 28px;display:flex;align-items:center;justify-content:space-between;gap:24px;flex-wrap:wrap}
+  .foot-in .motto{font-family:var(--en);font-weight:700;font-size:20px;letter-spacing:-.4px}
+  .foot-in .motto span{font-family:var(--jp);display:block;font-size:13px;color:var(--muted);font-weight:400;margin-top:6px}
+  .foot-in .note2{font-family:var(--en);font-size:11.5px;color:var(--faint);text-align:right;line-height:1.7}
+
+  #loading{position:fixed;inset:0;background:#0B1220;color:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;z-index:100;transition:opacity .4s}
+  #loading.hide{opacity:0;pointer-events:none}
+  .spin{width:38px;height:38px;border:3px solid rgba(255,255,255,.2);border-top-color:#5EEAD4;border-radius:50%;animation:rot .8s linear infinite}
+  @keyframes rot{to{transform:rotate(360deg)}}
+  #loading .lt{font-family:var(--en);font-size:13px;letter-spacing:1px;color:rgba(255,255,255,.7)}
+  #errbar{display:none;background:var(--bad-bg);border:1px solid #FAD2D7;color:var(--bad);font-size:13px;padding:12px 16px;border-radius:12px;margin:18px 0;font-family:var(--jp)}
+
+  /* modal */
+  .modal{display:none;position:fixed;inset:0;z-index:200}
+  .modal.open{display:block}
+  .modal-bg{position:absolute;inset:0;background:rgba(11,18,32,.55);backdrop-filter:blur(4px);animation:fade .25s}
+  .modal-card{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%) scale(.96);width:min(640px,92vw);max-height:84vh;
+    background:#fff;border-radius:22px;box-shadow:0 30px 80px rgba(11,18,32,.4);display:flex;flex-direction:column;overflow:hidden;
+    animation:pop .28s cubic-bezier(.16,1,.3,1) forwards}
+  .modal-head{display:flex;align-items:flex-start;justify-content:space-between;padding:24px 26px 18px;border-bottom:1px solid var(--line)}
+  .modal-head h3{font-family:var(--en);font-weight:800;font-size:21px;letter-spacing:-.5px}
+  .modal-head .mcount{font-size:12.5px;color:var(--muted);margin-top:4px}
+  .mclose{width:34px;height:34px;border-radius:10px;border:1px solid var(--line);background:#fff;font-size:20px;color:var(--muted);cursor:pointer;line-height:1;transition:.15s;flex-shrink:0}
+  .mclose:hover{background:var(--soft);color:var(--ink)}
+  .modal-list{overflow-y:auto;padding:8px 26px 24px}
+  .mrow{display:flex;align-items:center;gap:14px;padding:13px 0;border-bottom:1px solid var(--line-2)}
+  .mrow:last-child{border-bottom:0}
+  .mleft{flex:1;min-width:0}
+  .mname{font-size:13.5px;font-weight:600;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .msub{font-size:11.5px;color:var(--faint);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .mright{display:flex;align-items:center;gap:12px;flex-shrink:0}
+  .mdate{font-family:var(--en);font-size:12.5px;color:var(--muted);font-weight:600}
+  @keyframes fade{from{opacity:0}}
+  @keyframes pop{from{opacity:0;transform:translate(-50%,-50%) scale(.96)}to{opacity:1;transform:translate(-50%,-50%) scale(1)}}
+
+  @keyframes rise{to{opacity:1;transform:translateY(0)}}
+  @media(max-width:880px){.kpis{grid-template-columns:repeat(2,1fr)}.grid2{grid-template-columns:1fr}.lc{grid-template-columns:repeat(3,1fr)}}
+  @media(max-width:480px){.wrap{padding:0 16px}.kpis{grid-template-columns:1fr 1fr;gap:12px}.kpi .val{font-size:38px}.lc{grid-template-columns:repeat(2,1fr)}.goal{gap:18px}.hero-body{padding-bottom:110px}}
+</style>
+</head>
+<body>
+
+<div id="loading"><div class="spin"></div><div class="lt">Loading pipeline…</div></div>
+
+<div class="hero">
+  <div class="wrap">
+    <div class="nav">
+      <div class="brand">
+        <div class="logo"><svg viewBox="0 0 24 24" fill="none"><path d="M5 14.5 10 9l3.5 3.5L19 6.5" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="19" cy="6.5" r="2" fill="#5EEAD4"/></svg></div>
+        <div class="bn">LOOK UP Light<small>KPI トラッカー</small></div>
+      </div>
+      <div class="meta">Last updated<b id="updated">—</b></div>
+    </div>
+    <div class="hero-body">
+      <div class="eyebrow">freee 税理士紹介 Pipeline</div>
+      <h1>Power your<br><span class="accent">pipeline.</span></h1>
+      <p class="lead">紹介から契約まで、チーム全員が同じ数字を見る。<br>会計を、重荷ではなく羽にする ── その手前の、最初のひと押しを可視化する。</p>
+      <span class="chip"><span class="live"></span>Notion から毎朝 自動更新 ・ <span id="universe" class="en">—</span> 件</span>
+    </div>
+  </div>
+</div>
+
+<div class="wrap">
+  <div id="errbar"></div>
+
+  <div class="goal" id="goalCard">
+    <div>
+      <div class="gl">Monthly Goal</div>
+      <div class="gv"><span id="gNow">0</span><small> / <span id="gTarget">10</span></small></div>
+      <div style="font-size:12px;color:var(--muted);margin-top:4px">今月の契約目標</div>
+    </div>
+    <div class="bar-wrap">
+      <div class="bt"><span>達成率</span><b id="gPct">0%</b></div>
+      <div class="track"><div class="fill" id="gFill"></div></div>
+    </div>
+    <div class="cheer" id="gCheer">—</div>
+  </div>
+
+  <div class="shead"><div class="lab">今月の実績</div><h2>This Month</h2><div class="sub">紹介・面談実施・契約のカードはタップで内訳が開きます</div></div>
+  <div class="kpis">
+    <div class="kpi clickable" data-key="leads"><div class="glow"></div><div class="more">詳細 ›</div><div class="lab"><span class="jp">紹介数</span><span class="en">Leads</span></div><div class="val" id="kLeads">0</div><div class="foot"><span id="kLeadsT" class="trend flat">—</span>vs 先月</div></div>
+    <div class="kpi clickable" data-key="met"><div class="glow"></div><div class="more">詳細 ›</div><div class="lab"><span class="jp">面談実施</span><span class="en">Meetings</span></div><div class="val" id="kMeet">0</div><div class="foot"><span id="kMeetT" class="trend flat">—</span>vs 先月</div></div>
+    <div class="kpi clickable" data-key="won"><div class="glow"></div><div class="more">詳細 ›</div><div class="lab"><span class="jp">契約数</span><span class="en">Won</span></div><div class="val" id="kWon">0</div><div class="foot"><span id="kWonT" class="trend flat">—</span>vs 先月</div></div>
+    <div class="kpi"><div class="glow"></div><div class="lab"><span class="jp">成約率</span><span class="en">Close rate</span></div><div class="val"><span id="kClose">0</span><small>%</small></div><div class="foot">直近2か月コホート ・ <span id="kCloseN">—</span></div></div>
+  </div>
+
+  <div class="shead"><div class="lab">ファネル & 推移</div><h2>The Funnel</h2><div class="sub">freee税理士紹介リードが、各段階をどう進むか</div></div>
+  <div class="grid2">
+    <div class="card"><div class="ct"><h3>Conversion</h3><span class="jp">今月のファネル</span></div><div class="hint">各段階の件数と、ひとつ前からの転換率</div><div class="funnel" id="funnel"></div></div>
+    <div class="card"><div class="ct"><h3>Daily Momentum</h3><span class="jp">直近30日・累計</span></div><div class="hint">過去にさかのぼり、初日から満タンで描画（バックフィル）</div><div class="chart-box" id="chartBox"><canvas id="trend"></canvas></div></div>
+  </div>
+
+  <div class="shead"><div class="lab">入力の健康診断</div><h2>Data Health</h2><div class="sub">この数字が埋まるほど、上のKPIが正確になる ── 入力は、未来の自分への投資</div></div>
+  <div class="grid2">
+    <div class="card"><div class="ct"><h3>Fill rate</h3><span class="jp">日付6項目</span></div><div class="hint">緑＝良好 / 黄＝あと少し / 赤＝要入力</div><div id="fillRows"></div>
+      <div class="note">⚠️ <div><b>契約締結予定日・契約開始日</b>が低いときは、契約まわりの日付を入れると契約数と成約率がぐっと正確になります。</div></div></div>
+    <div class="card"><div class="ct"><h3>Needs Attention</h3><span class="jp">入力漏れ</span></div><div class="hint">ステータスは進んでいるのに「契約開始日」が空のレコード</div><div class="flist" id="attention"></div></div>
+  </div>
+
+  <div class="shead"><div class="lab">いまの滞留</div><h2>Pipeline Now</h2><div class="sub">各ステージに、いま何件が止まっているか</div></div>
+  <div class="lc" id="lifecycle"></div>
+</div>
+
+<footer><div class="foot-in">
+  <div class="motto">Accounting as a tailwind.<span>会計を、重荷ではなく羽にする。</span></div>
+  <div class="note2">Notion から毎朝 自動取得 ・ 閲覧専用<br>© 2026 LOOK UP ACCOUNTING</div>
+</div></footer>
+
+<!-- modal -->
+<div class="modal" id="modal">
+  <div class="modal-bg" id="modalBg"></div>
+  <div class="modal-card">
+    <div class="modal-head"><div><h3 id="mTitle">—</h3><div class="mcount" id="mCount"></div></div><button class="mclose" id="mClose">×</button></div>
+    <div class="modal-list" id="mList"></div>
+  </div>
+</div>
+
+<script>
+let DATA=null;
+const $=(id)=>document.getElementById(id);
+const esc=(s)=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+function countUp(el,to,dur=1000){const s=performance.now();
+  (function t(n){const p=Math.min((n-s)/dur,1),e=1-Math.pow(1-p,3);el.textContent=Math.round(to*e);if(p<1)requestAnimationFrame(t)})(s)}
+function obs(el){requestAnimationFrame(()=>el.classList.add("in"))}
+function safe(fn){try{fn()}catch(e){console.error("[render]",e)}}
+function setTrend(el,d){
+  if(d>0){el.className="trend up";el.textContent="▲ +"+d;}
+  else if(d<0){el.className="trend down";el.textContent="▼ "+d;}
+  else{el.className="trend flat";el.textContent="― ±0";}
+}
+function badgeCls(stage){
+  if(stage==="契約中"||stage==="オンボーディング")return"ac";
+  if(stage==="失注"||stage==="連絡途絶")return"gr";
+  return"ob";
+}
+const LIFE_STYLE={
+  "面談前":{op:.35},"面談後":{op:.5},"契約締結手続中":{op:.7},"オンボーディング":{op:.9},
+  "契約中":{c:"#10B981"},"失注":{c:"#CBD5E1",t:"var(--faint)"},"連絡途絶":{c:"#CBD5E1",t:"var(--faint)"}
+};
+
+function renderHeader(d){$("updated").textContent=d.updatedAt;$("universe").textContent=d.universe;}
+function renderGoal(d){
+  $("gTarget").textContent=d.goal.target; obs($("goalCard"));
+  setTimeout(()=>{countUp($("gNow"),d.goal.now);
+    $("gFill").style.width=Math.min(d.goal.pct,100)+"%";
+    const g=$("gPct"),s=performance.now();
+    (function t(n){let p=Math.min((n-s)/1000,1),e=1-Math.pow(1-p,3);g.textContent=Math.round(d.goal.pct*e)+"%";if(p<1)requestAnimationFrame(t)})(s);
+    const rem=d.goal.target-d.goal.now;
+    $("gCheer").textContent=rem>0?`あと ${rem}件 🔥`:`目標達成 🎉`;
+  },200);
+}
+function renderKPI(d){
+  document.querySelectorAll(".kpi").forEach(obs);
+  countUp($("kLeads"),d.month.leads,1100);
+  countUp($("kMeet"),d.month.meetings,1100);
+  countUp($("kWon"),d.month.won,1100);
+  countUp($("kClose"),d.month.closeRate,1100);
+  setTrend($("kLeadsT"),d.month.leadsDelta);
+  setTrend($("kMeetT"),d.month.meetingsDelta);
+  setTrend($("kWonT"),d.month.wonDelta);
+  $("kCloseN").textContent="n="+d.month.cohortSize;
+}
+function renderFunnel(d){
+  const f=d.funnel, base=Math.max(f.leads,1);
+  const stages=[
+    {en:"Leads",jp:"📨 紹介（問い合わせ）",n:f.leads,grad:"linear-gradient(90deg,#13224A,#1E3A8A)"},
+    {conv:f.c1,to:"面談設定"},
+    {en:"Scheduled",jp:"📅 面談設定",n:f.scheduled,grad:"linear-gradient(90deg,#1E3A8A,#2563EB)"},
+    {conv:f.c2,to:"面談実施"},
+    {en:"Met",jp:"🤝 面談実施",n:f.met,grad:"linear-gradient(90deg,#2563EB,#3B82F6)"},
+    {conv:f.c3,to:"契約",drop:true},
+    {en:"Won",jp:"✅ 契約",n:f.won,grad:"linear-gradient(90deg,#0F9D77,#10B981)"},
+  ];
+  const fc=$("funnel"); fc.innerHTML="";
+  stages.forEach((st,i)=>{
+    if(st.grad!==undefined){
+      const w=Math.max(Math.round(st.n/base*100),8);
+      const bar=document.createElement("div");bar.className="fstage";
+      bar.innerHTML=`<div class="fbar" style="width:${w}%;background:${st.grad}"><span class="fl"><span class="en">${st.en}</span>${st.jp}</span><span class="fn">${st.n}</span></div>`;
+      fc.appendChild(bar);
+      setTimeout(()=>bar.querySelector(".fbar").classList.add("in"),200+i*70);
+    }else{
+      const c=document.createElement("div");c.className="conv"+(st.drop?" drop":"");
+      c.innerHTML=`<span>↓</span><span class="pct">${st.conv}%</span><span class="jp">が${st.to}へ</span>`;
+      fc.appendChild(c);
+    }
+  });
+}
+function renderFill(d){
+  const fr=$("fillRows"); fr.innerHTML="";
+  d.fillRate.forEach((row,i)=>{
+    const c=row.v>=80?"g":row.v>=50?"y":"r";
+    const el=document.createElement("div");el.className="frow";
+    el.innerHTML=`<div class="fn">${row.name}</div><div class="ft"><div class="ff ${c}"></div></div><div class="fp ${c}">${row.v}%</div>`;
+    fr.appendChild(el);
+    setTimeout(()=>el.querySelector(".ff").style.width=row.v+"%",300+i*90);
+  });
+}
+function renderLife(d){
+  const lc=$("lifecycle"); lc.innerHTML="";
+  d.lifecycle.forEach((cell,i)=>{
+    const st=LIFE_STYLE[cell.name]||{op:.6};
+    const el=document.createElement("div");el.className="lcell";
+    const barStyle=st.c?`background:${st.c}`:`opacity:${st.op}`;
+    const numStyle=st.t?`color:${st.t}`:"";
+    el.innerHTML=`<div class="ln" style="${numStyle}">${cell.n}</div><div class="ll">${cell.name}</div><div class="lbar" style="${barStyle}"></div>`;
+    lc.appendChild(el); setTimeout(()=>el.classList.add("in"),i*55);
+  });
+}
+function renderAttn(d){
+  const at=$("attention"); at.innerHTML="";
+  if(!d.attention.length){at.innerHTML='<div class="empty">🎉 入力漏れはありません</div>';return;}
+  d.attention.forEach(a=>{
+    const el=document.createElement("div");el.className="fitem";
+    el.innerHTML=`<span class="fid">${esc(a.id)}</span><div class="fco">${esc(a.name)}<div class="who">担当：${esc(a.who)}</div></div><span class="bdg ${badgeCls(a.stage)}">${esc(a.stage)}</span><span class="miss">契約開始日 空</span>`;
+    at.appendChild(el);
+  });
+}
+function ensureChart(cb){
+  if(window.Chart)return cb(true);
+  const s=document.createElement("script");
+  s.src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js";
+  s.onload=()=>cb(!!window.Chart); s.onerror=()=>cb(false);
+  document.head.appendChild(s);
+}
+function renderChart(d){
+  ensureChart((ok)=>{
+    if(!ok){ $("chartBox").innerHTML='<div class="chart-fallback">グラフ部分だけ読み込めませんでした（他の数字は表示されています）。社内ネットワークが cdnjs / jsdelivr をブロックしている可能性があります。</div>'; return; }
+    try{
+      const mk=(l,x,col,fill)=>({label:l,data:x,borderColor:col,backgroundColor:fill||"transparent",borderWidth:2.4,tension:.35,pointRadius:0,pointHoverRadius:4,fill:!!fill});
+      new Chart($("trend"),{type:"line",
+        data:{labels:d.trend.labels,datasets:[
+          mk("紹介",d.trend.leads,"#1E3A8A","rgba(30,58,138,.08)"),
+          mk("面談設定",d.trend.scheduled,"#2563EB"),
+          mk("面談実施",d.trend.met,"#3B82F6"),
+          mk("契約",d.trend.won,"#10B981")]},
+        options:{responsive:true,maintainAspectRatio:false,interaction:{mode:"index",intersect:false},
+          plugins:{legend:{position:"bottom",labels:{boxWidth:9,boxHeight:9,usePointStyle:true,pointStyle:"circle",font:{family:"Plus Jakarta Sans",size:11.5},color:"#475569",padding:15}},
+            tooltip:{backgroundColor:"#0B1220",padding:12,cornerRadius:10,titleFont:{family:"Plus Jakarta Sans"},bodyFont:{family:"Plus Jakarta Sans"},usePointStyle:true,boxPadding:5}},
+          scales:{x:{grid:{display:false},ticks:{font:{family:"Plus Jakarta Sans",size:10},color:"#9AA4B2",maxTicksLimit:8}},
+            y:{beginAtZero:true,grid:{color:"#F0F4FA"},border:{display:false},ticks:{font:{family:"Plus Jakarta Sans",size:10},color:"#9AA4B2",precision:0,maxTicksLimit:6}}}}});
+    }catch(e){ console.error("[chart]",e); $("chartBox").innerHTML='<div class="chart-fallback">グラフの描画に失敗しました（他の数字は表示されています）。</div>'; }
+  });
+}
+
+// modal
+function openModal(title,items){
+  $("mTitle").textContent=title;
+  $("mCount").textContent=`${items.length}件`;
+  const list=$("mList");
+  if(!items.length){ list.innerHTML='<div class="empty" style="color:var(--faint)">該当する先はありません</div>'; }
+  else{
+    list.innerHTML=items.map(r=>`
+      <div class="mrow">
+        <div class="mleft"><div class="mname">${esc(r.name)}</div><div class="msub">${esc(r.gyo)} ・ 担当：${esc(r.who)}</div></div>
+        <div class="mright"><span class="mdate">${r.date?r.date.slice(5):"—"}</span><span class="bdg ${badgeCls(r.stage)}">${esc(r.stage)}</span></div>
+      </div>`).join("");
+  }
+  $("modal").classList.add("open");
+}
+function closeModal(){$("modal").classList.remove("open");}
+function bindCards(){
+  const titles={leads:"紹介（今月）",met:"面談実施（今月）",won:"契約（今月）"};
+  document.querySelectorAll(".kpi.clickable").forEach(c=>{
+    c.addEventListener("click",()=>{const k=c.dataset.key; if(DATA&&DATA.details) openModal(titles[k],DATA.details[k]||[]);});
+  });
+  $("mClose").addEventListener("click",closeModal);
+  $("modalBg").addEventListener("click",closeModal);
+  document.addEventListener("keydown",(e)=>{if(e.key==="Escape")closeModal();});
+}
+
+fetch("/api/kpi")
+  .then(r=>r.json())
+  .then(d=>{
+    if(d.error)throw new Error(d.error);
+    DATA=d;
+    $("loading").classList.add("hide");
+    safe(()=>renderHeader(d));
+    safe(()=>renderGoal(d));
+    safe(()=>renderKPI(d));
+    safe(()=>renderFunnel(d));
+    safe(()=>renderFill(d));
+    safe(()=>renderLife(d));
+    safe(()=>renderAttn(d));
+    renderChart(d);
+    bindCards();
+  })
+  .catch(e=>{
+    $("loading").classList.add("hide");
+    const b=$("errbar"); b.style.display="block";
+    b.textContent="データの取得に失敗しました："+e.message+"（環境変数 NOTION_TOKEN / NOTION_DATABASE_ID と、DBへの接続をご確認ください）";
+  });
+</script>
+</body>
+</html>
